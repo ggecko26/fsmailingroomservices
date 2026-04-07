@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.default.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+  
+  <!-- felina -->
+  <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+  <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+  <style>
+    body { background-color: #f8fafc; color: #334155; margin: 0; padding: 0; }
+    .glass-effect { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+    .loader { border-top-color: #4f46e5; animation: spinner 1s linear infinite; }
+    @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .ts-wrapper .ts-control { border-radius: 0.5rem !important; padding: 0.6rem !important; border: 1px solid #cbd5e1 !important; background: #f8fafc !important; }
+    .ts-wrapper.focus .ts-control { border-color: #6366f1 !important; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2) !important; background: #fff !important; }
+    .premium-input { width: 100%; border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.6rem; font-size: 0.875rem; background: #f8fafc; transition: all 0.2s; }
+    .premium-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); background: #fff; }
+    .premium-label { display: block; font-size: 0.75rem; font-weight: 700; color: #475569; margin-bottom: 0.25rem; text-transform: uppercase; transition: all 0.3s; }
+    .swal2-title, .swal2-html-container { font-family: inherit !important; }
+
+    /* Customize DataTables agar senada dengan Tailwind - felina*/
+    .dataTables_wrapper .dataTables_filter input { border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 0.4rem; }
+    .dataTables_wrapper .dataTables_length select { border: 1px solid #e5e7eb; border-radius: 0.5rem; }
+    table.dataTable border-collapse: collapse !important;
+  </style>
+</head>
+<body class="font-sans relative">
+  <!-- LOGIN -->
+  <div id="loginScreen" class="fixed inset-0 z-[100] flex items-center justify-center transition-all duration-700 bg-slate-50">
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute -top-[20%] -right-[10%] w-[50%] h-[50%] rounded-full bg-indigo-500/10 blur-[100px]"></div>
+      <div class="absolute -bottom-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-emerald-500/10 blur-[100px]"></div>
+    </div>
+
+    <div class="bg-white/80 backdrop-blur-2xl p-10 md:p-12 rounded-[2.5rem] shadow-2xl max-w-md w-full border border-white relative z-10 text-center mx-4">
+      <div class="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white text-4xl shadow-lg shadow-indigo-500/30 mx-auto mb-6 transform -rotate-3 transition hover:rotate-0">
+        <i class="fa-solid fa-boxes-packing"></i>
+      </div>
+      <h2 class="text-3xl font-black text-slate-800 tracking-tight mb-1">Mailing<span class="text-indigo-600">Services</span></h2>
+      <p class="text-sm text-slate-500 font-semibold mb-8">Internal Shipping Portal</p>
+
+      <div id="loginError" class="hidden mb-6 p-4 rounded-2xl bg-red-50/90 border border-red-100 text-red-600 text-sm font-semibold shadow-sm text-left"></div>
+
+      <div class="mb-6 text-left">
+        <label class="block text-sm font-bold text-slate-700 mb-2">Verifikasi Email Karyawan</label>
+        <input type="email" id="inputSuperindoEmail" placeholder="nama@superindo.co.id" class="w-full border border-slate-300 rounded-xl p-4 text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-semibold" onkeypress="if(event.key === 'Enter') attemptLogin()">
+      </div>
+
+      <button id="btnEnter" onclick="attemptLogin()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-4 px-8 rounded-2xl shadow-xl shadow-slate-900/20 transition-all transform hover:-translate-y-1 flex items-center justify-center gap-3 active:scale-95">
+        <i class="fa-solid fa-right-to-bracket text-lg"></i>
+        <span>Masuk Portal</span>
+      </button>
+
+      <p class="text-[11px] text-slate-400 mt-8 font-medium"><i class="fa-solid fa-shield-halved mr-1 text-slate-300"></i> Akun Google Anda juga akan dicatat oleh sistem.</p>
+    </div>
+  </div>
+
+  <!-- MAIN PORTAL -->
+  <div id="mainPortalWrapper" class="hidden opacity-0 transition-opacity duration-700 p-4 md:p-8">
+    
+    <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center mb-6">
+      <div class="flex items-center gap-4 mb-4 md:mb-0">
+        <img id="mainLogo" src="" class="hidden h-14 object-contain">
+        <div id="defaultLogo" class="h-12 w-12 bg-indigo-600 rounded-xl flex items-center justify-center text-white text-2xl shadow-lg"><i class="fa-solid fa-boxes-packing"></i></div>
+        <div>
+          <h1 class="text-3xl font-extrabold text-slate-800">Mailing<span class="text-indigo-600">Services</span></h1>
+          <p class="text-xs text-slate-500 font-medium">Internal Shipping Portal</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <div class="bg-white border border-slate-200 py-1.5 px-4 rounded-full shadow-sm flex items-center gap-2">
+          <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          <span id="userInfoDisplay" class="text-sm font-semibold text-slate-700">Memuat...</span>
+        </div>
+        
+        <label id="btnViewDashboard" onclick="loadViewDashboardData()" class="cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-4 rounded-full text-sm font-semibold shadow-sm transition">
+          View Dashboard
+        </label>
+
+        <label id="btnUploadLogo" class="hidden cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-4 rounded-full text-sm font-semibold shadow-sm transition">
+          <i class="fa-solid fa-camera mr-1 text-indigo-500"></i> Ganti Logo
+          <input type="file" class="hidden" accept="image/png, image/jpeg" onchange="handleLogoUpload(event)">
+        </label>
+
+        <button id="btnAdminExport" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 px-4 rounded-full text-sm font-semibold shadow-md transition">
+          <i class="fa-solid fa-file-excel mr-1"></i> Tarik Laporan
+        </button>
+      </div>
+    </div>
+    
+    <div id="app" class="hidden max-w-6xl mx-auto bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
+      <div class="p-8">
+        <!-- FORM Simpan & Cetak Resi (A4) -->
+        <form id="shippingForm" onsubmit="event.preventDefault(); submitForm();">
+          <div class="mb-8">
+            <div class="flex items-center gap-2 mb-4">
+              <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">1</div>
+              <h2 class="text-lg font-bold text-slate-800">Informasi Pengirim</h2>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5 bg-slate-50 p-6 rounded-xl border border-slate-200">
+              <div><label class="premium-label">Employee Number *</label><input type="text" id="empNumber" required class="premium-input"></div>
+              <div><label class="premium-label">Nama Pengirim *</label><input type="text" id="senderName" required class="premium-input"></div>
+              <div><label class="premium-label">Email Superindo *</label><input type="email" id="senderEmail" required class="premium-input"></div>
+              <div><label class="premium-label">Nomor HP *</label><input type="text" id="senderPhone" required class="premium-input"></div>
+              <div>
+                <label class="premium-label">Region *</label>
+                <select id="senderRegion" required class="premium-input" onchange="loadDivisi('sender'); checkCSO();">
+                  <option value="">-- Pilih --</option>
+                  <option value="CSO">CSO</option>
+                  <option value="BO">BO</option>
+                  <option value="DC">DC</option>
+                  <option value="STORE">STORE</option>
+                  <option value="OTHER">OTHER (EXT)</option>
+                </select>
+              </div>
+              <div class="relative">
+                <label class="premium-label">Divisi *</label>
+                <select id="senderDivisi" required class="premium-input" placeholder="Pilih Region Dulu"></select>
+                <input type="text" id="senderDivisiOther" class="hidden premium-input mt-1" placeholder="Manual divisi">
+              </div>
+              <div class="md:col-span-3 flex flex-wrap gap-6 py-3 px-4 bg-white rounded-lg border border-slate-200 shadow-sm mt-2">
+                <div class="flex-1">
+                  <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Cost Center</p>
+                  <p class="text-sm font-semibold text-slate-800" id="lblSenderCC">-</p>
+                </div>
+                <div class="flex-1 border-l pl-6">
+                  <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Alamat Lengkap</p>
+                  <p class="text-sm font-semibold text-slate-800" id="lblSenderAlamat">-</p>
+                </div>
+              </div>
+              <div id="pembebananContainer" class="hidden md:col-span-3 bg-amber-50 p-4 rounded-lg border border-amber-200 mt-2 flex items-center gap-4">
+                <i class="fa-solid fa-circle-exclamation text-amber-500 text-xl"></i>
+                <div class="flex-1">
+                  <label class="premium-label !text-amber-800">Pembebanan Biaya (CSO) *</label>
+                  <select id="pembebanan" class="premium-input !bg-white md:w-1/3 mt-1 border-amber-300">
+                    <option value="Pengirim">Ditanggung Pengirim</option>
+                    <option value="Penerima">Ditanggung Penerima</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex flex-col md:flex-row justify-between items-center mb-6 bg-indigo-50/50 p-5 rounded-xl border border-indigo-100">
+            <div class="flex items-center gap-3">
+               <div class="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold">2</div>
+               <div>
+                 <label class="block text-sm font-extrabold text-slate-800">Berapa Tujuan? *</label>
+                 <select id="jumlahTujuan" class="mt-1 bg-white border border-indigo-200 text-indigo-700 text-sm rounded-lg w-32 p-2.5 font-bold shadow-sm" onchange="generateRecipientForms()"></select>
+               </div>
+            </div>
+            <div class="flex items-center gap-3 mt-4 md:mt-0">
+              <span class="text-xs font-semibold text-slate-500">Upload massal:</span>
+              <button type="button" onclick="downloadTemplate()" class="bg-white text-slate-700 border border-slate-200 text-xs py-2 px-4 rounded-lg shadow-sm font-semibold hover:bg-slate-50 transition"><i class="fa-solid fa-download text-emerald-600 mr-1"></i> Template</button>
+              
+              <label class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2 px-4 rounded-lg shadow-sm font-semibold cursor-pointer transition">
+                <i class="fa-solid fa-file-excel mr-1"></i> Upload Excel
+                <input type="file" id="bulkUpload" class="hidden" accept=".xlsx, .xls" onclick="return checkSenderDataFirst(event)" onchange="handleExcelUpload(event)">
+              </label>
+            </div>
+          </div>
+
+          <div id="recipientsContainer" class="space-y-6"></div>
+
+          <div class="mt-10 pt-6 flex justify-end">
+            <button type="submit" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-4 px-10 rounded-2xl shadow-xl transition transform hover:-translate-y-1 flex items-center text-lg shadow-indigo-500/30">
+              <i class="fa-solid fa-print mr-3"></i> Simpan & Cetak Resi (A4)
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- VIEW DASHBOARD SECTION -->
+    <div id="viewDashboardSection" class="hidden bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+      <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
+          <div class="flex items-center gap-2">
+              <button onclick="showSection('app')" class="px-5 py-2 bg-primary text-black rounded shadow hover:scale-105 font-bold">
+                  <i class="fas fa-plus"></i> Input Baru
+              </button>
+              <h2 class="font-bold text-xl ml-4">History Pengiriman</h2>
+          </div>
+          
+          <div class="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border">
+              <input type="date" id="filterStartDate" onchange="setMinEndDate()" class="border rounded px-2 py-1 text-sm">
+              <span>s/d</span>
+              <input type="date" id="filterEndDate" class="border rounded px-2 py-1 text-sm">
+              <button onclick="loadViewDashboardData()" class="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 text-sm">
+                  <i class="fas fa-sync"></i> Refresh
+              </button>
+          </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table id="mainTable" class="w-full text-left border-collapse">
+            <thead>
+                <tr class="bg-slate-100">
+                    <th class="p-3 border-b text-slate-700 font-bold">Waktu</th>
+                    <th class="p-3 border-b text-slate-700 font-bold">Email Super Indo</th>
+                    <th class="p-3 border-b text-slate-700 font-bold">Nama Pengirim</th>
+                    <th class="p-3 border-b text-slate-700 font-bold">Region</th>
+                    <th class="p-3 border-b text-slate-700 font-bold">Divisi</th>
+                    <th class="p-3 border-b text-center text-slate-700 font-bold">Tujuan</th>
+                    <th class="p-3 border-b text-center text-slate-700 font-bold">Aksi</th>
+                </tr>
+            </thead>
+            <tbody id="viewDashboardTable">
+                </tbody>
+        </table>
+      </div>
+    </div>
+
+
+  </div>
+
+  <div id="loading" style="display:none;" class="glass-effect flex-col justify-center items-center">
+    <div class="loader rounded-full border-4 border-t-4 border-slate-200 h-16 w-16 mb-6"></div>
+    <p class="text-xl font-bold text-slate-700" id="loadingText">Memproses...</p>
+  </div>
+
+  <script>
+    let masterDivisi = [], currentUser = {}, tsInstances = {};
+    let cardCounterId = 0; //ID unik untuk setiap blok resi agar aman saat dihapus acak
+
+    function showLoading(show, text = "Memproses...") {
+      document.getElementById('loadingText').innerText = text;
+      const loader = document.getElementById('loading');
+      if (show) { loader.style.display = 'flex'; loader.style.position = 'fixed'; loader.style.top = '0'; loader.style.left = '0'; loader.style.width = '100vw'; loader.style.height = '100vh'; loader.style.zIndex = '9999'; } 
+      else { loader.style.display = 'none'; }
+    }
+
+    function showErrorAlert(message) {
+      Swal.fire({ icon: 'error', title: 'Oops...', text: message, confirmButtonColor: '#4f46e5' });
+    }
+
+    //ALGORITMA FUZZY LOGIC (KOREKSI OTOMATIS)
+    function levenshtein(s1, s2) {
+      s1 = s1.toLowerCase(); s2 = s2.toLowerCase();
+      let costs = [];
+      for (let i = 0; i <= s1.length; i++) {
+        let lastValue = i;
+        for (let j = 0; j <= s2.length; j++) {
+          if (i == 0) costs[j] = j;
+          else {
+            if (j > 0) {
+              let newValue = costs[j - 1];
+              if (s1.charAt(i - 1) != s2.charAt(j - 1)) newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+              costs[j - 1] = lastValue; lastValue = newValue;
+            }
+          }
+        }
+        if (i > 0) costs[s2.length] = lastValue;
+      }
+      return costs[s2.length];
+    }
+    
+    function getSimilarity(s1, s2) {
+      let longer = s1; let shorter = s2;
+      if (s1.length < s2.length) { longer = s2; shorter = s1; }
+      let longerLength = longer.length;
+      if (longerLength == 0) return 1.0;
+      return (longerLength - levenshtein(longer, shorter)) / parseFloat(longerLength);
+    }
+
+    function findBestMatch(input, optionsArray, threshold = 0.65) {
+      if(!input) return null;
+      let bestMatch = null;
+      let highestSimilarity = 0;
+      for(let option of optionsArray) {
+          if(option.toLowerCase() === input.toLowerCase()) return option; // Perfect match
+          let sim = getSimilarity(input, option);
+          if(sim > highestSimilarity) { highestSimilarity = sim; bestMatch = option; }
+      }
+      return highestSimilarity >= threshold ? bestMatch : null;
+    }
+    // ------------------------------------------------
+
+    window.onload = function() {
+      //Maksimal dikembalikan ke 20
+      for(let i=1; i<=20; i++) document.getElementById('jumlahTujuan').innerHTML += `<option value="${i}">${i} Tujuan</option>`;
+      document.getElementById('inputSuperindoEmail').focus();
+    };
+
+    function attemptLogin() {
+      const emailInput = document.getElementById('inputSuperindoEmail').value;
+      if (!emailInput) return showErrorAlert("Harap isi Email Perusahaan Anda.");
+
+      const btn = document.getElementById('btnEnter');
+      const errorBox = document.getElementById('loginError');
+      btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin text-lg"></i> <span>Memverifikasi...</span>';
+      btn.disabled = true; errorBox.classList.add('hidden');
+
+      google.script.run
+        .withFailureHandler(err => {
+           btn.innerHTML = '<i class="fa-solid fa-right-to-bracket text-lg"></i> <span>Masuk Portal</span>';
+           btn.disabled = false;
+           errorBox.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1"></i> Akses Ditolak!<br><span class="text-xs text-slate-600 font-normal block mt-1">${err.message}</span>`;
+           errorBox.classList.remove('hidden');
+        })
+        .withSuccessHandler(info => {
+           currentUser = info;
+           let roleBadge = 
+            `<span class="bg-slate-200 text-slate-800 px-2 py-0.5 rounded text-[10px] ml-2 uppercase">
+                ${info.role}
+            </span>`;
+
+           document.getElementById('userInfoDisplay').innerHTML = `${info.superindoEmail.split('@')[0]} ${roleBadge}`;
+           
+           document.getElementById('app').classList.remove('hidden'); 
+
+           if(info.role === 'Admin' || info.role === 'Owner') {
+             document.getElementById('btnAdminExport').classList.remove('hidden'); 
+             document.getElementById('btnAdminExport').onclick = exportData;
+           }
+           if(info.role === 'Owner') {
+             document.getElementById('btnUploadLogo').classList.remove('hidden'); 
+             document.getElementById('btnUploadLogo').classList.add('inline-flex');
+           }
+           if (info.logo) applyLogo(info.logo);
+
+           const loginScreen = document.getElementById('loginScreen');
+           const appWrapper = document.getElementById('mainPortalWrapper');
+
+           loginScreen.classList.add('opacity-0', '-translate-y-10');
+           setTimeout(() => {
+              loginScreen.style.display = 'none'; 
+              appWrapper.classList.remove('hidden'); 
+
+              setTimeout(() => { 
+                appWrapper.classList.remove('opacity-0'); 
+              }, 50);
+
+              showLoading(true, "Mempersiapkan Portal...");
+              google.script.run
+                .withFailureHandler(err => { showLoading(false); showErrorAlert("Gagal memuat Data Master: " + err.message); })
+                .withSuccessHandler(function(data) {
+                    masterDivisi = data; 
+                    generateRecipientForms(1); 
+                    showLoading(false);
+                    Swal.fire({ 
+                      toast: true, 
+                      position: 'top-end', 
+                      showConfirmButton: false, 
+                      timer: 3000, 
+                      icon: 'success', 
+                      title: `Selamat datang!` 
+                    });
+                }).getMasterDivisi();
+           }, 700);
+        }).verifyUserLogin(emailInput);
+    }
+
+    function handleLogoUpload(e) {
+      const file = e.target.files[0]; if (!file) return;
+      if (file.size > 2 * 1024 * 1024) return showErrorAlert("Ukuran logo maksimal 2MB.");
+      showLoading(true, "Mengunggah Logo...");
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        google.script.run
+          .withFailureHandler(err => { showLoading(false); showErrorAlert("Gagal simpan logo: " + err.message); })
+          .withSuccessHandler(res => { applyLogo(evt.target.result); showLoading(false); Swal.fire({ icon: 'success', title: 'Berhasil!', text: res, timer: 2000, showConfirmButton: false }); }).saveLogo(evt.target.result);
+      }; reader.readAsDataURL(file);
+    }
+
+    function applyLogo(base64) { 
+      document.getElementById('defaultLogo').classList.add('hidden'); 
+      document.getElementById('mainLogo').src = base64; 
+      document.getElementById('mainLogo').classList.remove('hidden'); 
+    }
+
+    function checkCSO() {
+      document.getElementById('pembebananContainer').classList.toggle('hidden', document.getElementById('senderRegion').value !== 'CSO');
+      if(document.getElementById('senderRegion').value !== 'CSO') document.getElementById('pembebanan').value = 'Pengirim';
+    }
+
+    //CEGAH UPLOAD SEBELUM ISI DATA PENGIRIM
+    function checkSenderDataFirst(e) {
+      const isFilled = document.getElementById('empNumber').value && 
+                       document.getElementById('senderName').value && 
+                       document.getElementById('senderEmail').value && 
+                       document.getElementById('senderPhone').value && 
+                       document.getElementById('senderRegion').value;
+      
+      if(!isFilled) {
+          e.preventDefault(); //Batalkan aksi buka window upload file
+          Swal.fire({ icon: 'warning', title: 'Data Pengirim Kosong', text: 'Harap lengkapi Formulir Informasi Pengirim terlebih dahulu sebelum melakukan Upload Massal.', confirmButtonColor: '#4f46e5' });
+          return false;
+      }
+      return true;
+    }
+
+    function loadDivisi(type, index = null) {
+      const isSender = type === 'sender';
+      const regionVal = document.getElementById(isSender ? 'senderRegion' : `recRegion_${index}`).value;
+      const selectDivisi = document.getElementById(isSender ? 'senderDivisi' : `recDivisi_${index}`);
+      const inputOther = document.getElementById(isSender ? 'senderDivisiOther' : `recDivisiOther_${index}`);
+      
+      if(tsInstances[selectDivisi.id]) { tsInstances[selectDivisi.id].destroy(); delete tsInstances[selectDivisi.id]; }
+      selectDivisi.innerHTML = '<option value="">-- Ketik/Pilih --</option>';
+      
+      if(regionVal === 'OTHER') {
+        selectDivisi.classList.add('hidden'); 
+        inputOther.classList.remove('hidden'); 
+        inputOther.required = true; 
+        selectDivisi.required = false;
+
+        if(isSender) { 
+            document.getElementById('lblSenderCC').innerText = '-'; document.getElementById('lblSenderAlamat').innerText = '-'; 
+        } else {
+            const lblDivisi = document.getElementById(`lblRecDivisi_${index}`);
+            const lblName = document.getElementById(`lblRecName_${index}`);
+            if(lblDivisi) { lblDivisi.innerText = 'ALAMAT LENGKAP TUJUAN *'; lblDivisi.classList.add('text-indigo-600'); }
+            if(lblName) { lblName.innerText = 'NAMA PENERIMA - NOMOR HP *'; lblName.classList.add('text-indigo-600'); }
+            if(inputOther) inputOther.placeholder = 'Ketik Alamat Lengkap...';
+        }
+      } else if (regionVal) {
+        selectDivisi.classList.remove('hidden'); inputOther.classList.add('hidden'); inputOther.required = false; selectDivisi.required = true;
+        if(!isSender) {
+            const lblDivisi = document.getElementById(`lblRecDivisi_${index}`);
+            const lblName = document.getElementById(`lblRecName_${index}`);
+            if(lblDivisi) { lblDivisi.innerText = 'Divisi *'; lblDivisi.classList.remove('text-indigo-600'); }
+            if(lblName) { lblName.innerText = 'Penerima *'; lblName.classList.remove('text-indigo-600'); }
+        }
+        masterDivisi.filter(d => d.region === regionVal).forEach(d => selectDivisi.innerHTML += `<option value="${d.divisi}" data-cc="${d.costCenter}" data-alamat="${d.alamat}">${d.divisi}</option>`);
+        tsInstances[selectDivisi.id] = new TomSelect('#' + selectDivisi.id, { create: false, sortField: { field: "text", direction: "asc" }, placeholder: "Ketik pencarian...", onChange: function() { if(isSender) autoFillSenderCC(); } });
+      } else {
+        if(!isSender) {
+            const lblDivisi = document.getElementById(`lblRecDivisi_${index}`); const lblName = document.getElementById(`lblRecName_${index}`);
+            if(lblDivisi) { lblDivisi.innerText = 'Divisi *'; lblDivisi.classList.remove('text-indigo-600'); }
+            if(lblName) { lblName.innerText = 'Penerima *'; lblName.classList.remove('text-indigo-600'); }
+        }
+      }
+    }
+
+    function autoFillSenderCC() {
+      const sel = document.getElementById('senderDivisi');
+      if(sel && sel.selectedIndex >= 0 && sel.value) {
+        const option = sel.options[sel.selectedIndex];
+        document.getElementById('lblSenderCC').innerText = option.getAttribute('data-cc') || '-';
+        document.getElementById('lblSenderAlamat').innerText = option.getAttribute('data-alamat') || '-';
+      }
+    }
+
+    //PEMBUATAN FORM & TOMBOL HAPUS
+    function generateRecipientForms(countOverride = null) {
+      const count = countOverride || parseInt(document.getElementById('jumlahTujuan').value);
+      if(countOverride) document.getElementById('jumlahTujuan').value = count;
+      
+      for (let key in tsInstances) { if (key.startsWith('recDivisi_')) { tsInstances[key].destroy(); delete tsInstances[key]; } }
+      const container = document.getElementById('recipientsContainer'); 
+      container.innerHTML = ''; 
+      cardCounterId = 0; // Reset
+      
+      let htmlFrag = '';
+      for(let i=1; i<=count; i++) {
+        cardCounterId++;
+        htmlFrag += createRecipientHTML(cardCounterId);
+      }
+      container.innerHTML = htmlFrag;
+      reindexCardTitles();
+    }
+
+    function createRecipientHTML(i) {
+      return `
+          <div id="cardRec_${i}" class="recipient-card relative bg-white border border-slate-200 rounded-xl shadow-sm pb-4 transition" data-id="${i}">
+            <div class="bg-slate-100 text-slate-700 font-bold px-4 py-2 border-b flex justify-between items-center mb-4">
+               <span class="card-title text-indigo-700">Penerima Ke-${i}</span>
+               <button type="button" onclick="removeRecipientCard(${i})" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-lg transition text-xs flex items-center gap-1 font-bold">
+                 <i class="fa-solid fa-trash-can"></i> Hapus
+               </button>
+            </div>
+            <div class="px-6 grid grid-cols-1 md:grid-cols-4 gap-5">
+              <div><label class="premium-label">Region *</label><select id="recRegion_${i}" required class="premium-input rec-region" onchange="loadDivisi('recipient', ${i})"><option value="">-- Pilih --</option><option value="CSO">CSO</option><option value="BO">BO</option><option value="DC">DC</option><option value="STORE">STORE</option><option value="OTHER">OTHER</option></select></div>
+              <div><label id="lblRecDivisi_${i}" class="premium-label">Divisi *</label><select id="recDivisi_${i}" required class="premium-input rec-divisi"></select><input type="text" id="recDivisiOther_${i}" class="hidden premium-input mt-1 rec-divisi-other" placeholder="Manual divisi"></div>
+              <div><label id="lblRecName_${i}" class="premium-label">Penerima *</label><input type="text" id="recName_${i}" required class="premium-input rec-name"></div>
+              <div><label class="premium-label">Paket *</label><select id="recPaket_${i}" required class="premium-input rec-paket"><option value="Reguler Goods">Reguler Goods</option><option value="Special Goods">Special Goods</option></select></div>
+              <div><label class="premium-label">Jumlah Koli *</label><input type="number" id="recQty_${i}" required min="1" class="premium-input rec-qty"></div>
+              <div><label class="premium-label text-amber-600">Asuransi? *</label><select id="recAsuransi_${i}" required class="premium-input border-amber-200 rec-asuransi" onchange="toggleHarga(${i})"><option value="Tidak">Tidak</option><option value="Ya">Ya, Asuransikan</option></select><input type="number" id="recHarga_${i}" placeholder="Nilai (Rp)" class="hidden premium-input mt-2 border-amber-300 bg-amber-50 rec-harga"></div>
+              <div class="col-span-2 bg-slate-50 p-3 rounded-lg border flex flex-col justify-center"><p class="premium-label mb-2">Proteksi Ekstra</p><div class="flex gap-6"><label class="flex items-center cursor-pointer text-sm font-semibold"><input type="checkbox" id="recKayu_${i}" class="mr-2 w-4 h-4 text-indigo-600 rec-kayu"> Packing Kayu</label><label class="flex items-center cursor-pointer text-sm font-semibold"><input type="checkbox" id="recBubble_${i}" class="mr-2 w-4 h-4 text-indigo-600 rec-bubble"> Bubble Wrap</label></div></div>
+              <div class="col-span-2 md:col-span-4 mt-2 border-t border-slate-100 pt-4"><label class="premium-label !text-indigo-700 !text-sm"><i class="fa-solid fa-truck-fast mr-1"></i> Layanan *</label><select id="recLayanan_${i}" required class="premium-input md:w-1/3 !border-indigo-300 !bg-indigo-50 !font-bold rec-layanan"><option value="Reguler">Layanan Reguler</option><option value="Urgent Express">Urgent Express (Prioritas)</option></select></div>
+            </div>
+          </div>
+        `;
+    }
+
+    function removeRecipientCard(id) {
+        const card = document.getElementById(`cardRec_${id}`);
+        if(card) {
+            if(tsInstances[`recDivisi_${id}`]) { tsInstances[`recDivisi_${id}`].destroy(); delete tsInstances[`recDivisi_${id}`]; }
+            card.remove();
+            reindexCardTitles();
+        }
+    }
+
+    function reindexCardTitles() {
+        const cards = document.querySelectorAll('.recipient-card');
+        if(cards.length === 0) {
+            //Paksa minimal 1 form jika semua dihapus
+            document.getElementById('jumlahTujuan').value = "1";
+            generateRecipientForms(1);
+            return;
+        }
+        document.getElementById('jumlahTujuan').value = cards.length;
+        cards.forEach((card, index) => {
+            const titleSpan = card.querySelector('.card-title');
+            if(titleSpan) titleSpan.innerText = `Penerima Ke-${index + 1}`;
+        });
+    }
+
+    function toggleHarga(index) {
+      const val = document.getElementById(`recAsuransi_${index}`).value;
+      const input = document.getElementById(`recHarga_${index}`);
+      if(val === 'Ya') { input.classList.remove('hidden'); input.required = true; } else { input.classList.add('hidden'); input.required = false; input.value = ''; }
+    }
+
+    //UPLOAD EXCEL DENGAN KOREKSI AI (FUZZY LOGIC)
+    function handleExcelUpload(e) {
+      const file = e.target.files[0]; if(!file) return; showLoading(true, "Menganalisa Data Excel...");
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const data = evt.target.result, workbook = XLSX.read(data, {type: 'binary'}), firstSheet = workbook.SheetNames[0];
+        const excelRows = XLSX.utils.sheet_to_row_object_array(workbook.Sheets[firstSheet]);
+        
+        if(excelRows.length === 0 || excelRows.length > 20) { 
+           showLoading(false); document.getElementById('bulkUpload').value = '';
+           return showErrorAlert('Jumlah penerima di Excel kosong atau melebihi batas performa sistem (Max 20 per upload).'); 
+        }
+
+        let errors = [];
+        let cleanData = [];
+        const validRegions = ['CSO', 'BO', 'DC', 'STORE', 'OTHER'];
+
+        //Proses Analisa & Koreksi per Baris
+        excelRows.forEach((row, idx) => {
+            let rowNum = idx + 2; // +2 karena baris 1 adalah header di excel
+            let rawRegion = (row.Tujuan_Region || "").toString().trim();
+            let rawDivisi = (row.Tujuan_Divisi || "").toString().trim();
+            
+            //Auto Correct Region
+            let bestRegion = findBestMatch(rawRegion, validRegions, 0.6);
+            if(!bestRegion) { errors.push(`<b>Baris ${rowNum}:</b> Region '${rawRegion}' tidak dikenali sistem.`); return; }
+
+            //Auto Correct Divisi
+            let finalDivisi = rawDivisi;
+            if (bestRegion !== 'OTHER') {
+                let validDivisis = masterDivisi.filter(d => d.region === bestRegion).map(d => d.divisi);
+                let bestDivisi = findBestMatch(rawDivisi, validDivisis, 0.65);
+                if(!bestDivisi) { errors.push(`<b>Baris ${rowNum}:</b> Divisi '${rawDivisi}' pada Region ${bestRegion} tidak ditemukan di database.`); return; }
+                finalDivisi = bestDivisi;
+            }
+
+            cleanData.push({
+                region: bestRegion, divisi: finalDivisi,
+                name: row.Nama_Penerima || "", paket: row.Jenis_Paket || "Reguler Goods",
+                qty: row.Jumlah_Barang || 1, asuransi: row["Asuransi(Ya/Tidak)"] || "Tidak",
+                harga: row.Harga_Barang || "", kayu: row["Packing_Kayu(Ya/Tidak)"] === 'Ya',
+                bubble: row["Packing_Bubble(Ya/Tidak)"] === 'Ya', layanan: row["Layanan(Reguler/Urgent Express)"] || "Reguler"
+            });
+        });
+
+        if(errors.length > 0) {
+            showLoading(false); document.getElementById('bulkUpload').value = '';
+            return Swal.fire({ icon: 'error', title: 'Data Excel Ditolak', html: `<p class="text-sm mb-2 text-slate-600">Sistem membatalkan upload karena menemukan kesalahan penulisan yang tidak bisa dikoreksi otomatis:</p><div class="text-left text-xs bg-red-50 p-3 rounded-lg border border-red-200 text-red-700 max-h-40 overflow-y-auto mb-2">${errors.join('<br>')}</div><p class="text-xs font-bold text-slate-600">Harap perbaiki Excel Anda dan upload kembali.</p>`});
+        }
+
+        //Render UI jika sukses
+        generateRecipientForms(cleanData.length);
+        setTimeout(() => { 
+          cleanData.forEach((data, index) => {
+            const i = index + 1;
+            document.getElementById(`recRegion_${i}`).value = data.region; 
+            loadDivisi('recipient', i);
+
+            setTimeout(() => {
+              if(data.region === 'OTHER') document.getElementById(`recDivisiOther_${i}`).value = data.divisi; 
+              else if(tsInstances[`recDivisi_${i}`]) tsInstances[`recDivisi_${i}`].setValue(data.divisi);
+            }, 100);
+
+            document.getElementById(`recName_${i}`).value = data.name; 
+            document.getElementById(`recPaket_${i}`).value = data.paket; 
+            document.getElementById(`recQty_${i}`).value = data.qty;
+
+            if(data.asuransi && data.asuransi.toLowerCase() === 'ya') { 
+              document.getElementById(`recAsuransi_${i}`).value = "Ya"; 
+              toggleHarga(i); 
+
+              document.getElementById(`recHarga_${i}`).value = data.harga; 
+            }
+
+            document.getElementById(`recKayu_${i}`).checked = data.kayu; 
+            document.getElementById(`recBubble_${i}`).checked = data.bubble; 
+            document.getElementById(`recLayanan_${i}`).value = data.layanan;
+          });
+
+          showLoading(false); 
+          
+          document.getElementById('bulkUpload').value = '';
+
+          Swal.fire({ 
+            icon: 'success', 
+            title: 'Upload & Koreksi Berhasil!', 
+            text: 'Formulir telah diisi otomatis dan divalidasi dengan Database.', 
+            confirmButtonColor: '#10b981', 
+            timer: 3000 
+          });
+
+        }, 500);
+
+      }; reader.readAsBinaryString(file);
+    }
+    
+    function submitForm() {
+      showLoading(true, "Menyimpan Transaksi...");
+      const cards = document.querySelectorAll('.recipient-card');
+
+      const payload = {
+        superindoEmail: currentUser.superindoEmail, 
+        userRole: currentUser.role,
+        empNumber: document.getElementById('empNumber').value, 
+        senderName: document.getElementById('senderName').value,
+        senderEmail: document.getElementById('senderEmail').value, 
+        senderPhone: document.getElementById('senderPhone').value,
+        senderRegion: document.getElementById('senderRegion').value,
+        senderDivisi: 
+          document.getElementById('senderRegion').value === 'OTHER' ? 
+            document.getElementById('senderDivisiOther').value : document.getElementById('senderDivisi').value,
+        senderCostCenter: document.getElementById('lblSenderCC').innerText, 
+        senderAlamat: document.getElementById('lblSenderAlamat').innerText,
+        pembebanan: document.getElementById('pembebanan').value, 
+        totalRecipients: cards.length, 
+        recipients: []
+      };
+
+      cards.forEach((card) => {
+        let i = card.getAttribute('data-id');
+        payload.recipients.push({
+          region: document.getElementById(`recRegion_${i}`).value,
+          divisi: document.getElementById(`recRegion_${i}`).value === 'OTHER' ? document.getElementById(`recDivisiOther_${i}`).value : document.getElementById(`recDivisi_${i}`).value,
+          name: document.getElementById(`recName_${i}`).value, 
+          jenisPaket: document.getElementById(`recPaket_${i}`).value,
+          qty: document.getElementById(`recQty_${i}`).value,
+          asuransi: document.getElementById(`recAsuransi_${i}`).value,
+          hargaBarang: document.getElementById(`recHarga_${i}`).value || 0,
+          packingKayu: document.getElementById(`recKayu_${i}`).checked ? 'Ya' : 'Tidak',
+          packingBubble: document.getElementById(`recBubble_${i}`).checked ? 'Ya' : 'Tidak',
+          layanan: document.getElementById(`recLayanan_${i}`).value
+        });
+      });
+
+      console.log("payload handleExcelUpload ",payload);
+
+      google.script.run
+        .withFailureHandler(err => { showLoading(false); showErrorAlert("Gagal menyimpan data ke Database: " + err.message); })
+        .withSuccessHandler(res => { 
+          showLoading(true, "Membuka Jendela Cetak..."); 
+          generateNativePrint(payload); 
+        }).saveData(payload);
+    }
+
+    function generateNativePrint(payload) {
+      const tempDiv = document.createElement('div'); 
+      tempDiv.style.position = 'absolute'; 
+      tempDiv.style.left = '-9999px'; 
+      tempDiv.style.visibility = 'hidden'; 
+      document.body.appendChild(tempDiv);
+
+      const logoSrc = document.getElementById('mainLogo').src; 
+      let html = ''; 
+      const waktuCetak = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+      payload.recipients.forEach((rec, index) => {
+        let recAlamat = "-";
+        if (rec.region !== 'OTHER') { 
+          const mData = masterDivisi.find(d => d.divisi === rec.divisi && d.region === rec.region); 
+          if (mData) recAlamat = mData.alamat; 
+        }
+
+        let proteksi = []; 
+        if(rec.packingKayu === 'Ya') proteksi.push("Kayu"); 
+        if(rec.packingBubble === 'Ya') proteksi.push("Bubble"); 
+        let teksProteksi = proteksi.length > 0 ? proteksi.join(" + ") : "Standar";
+
+        let randomKode = new Date().getTime().toString().slice(-6); 
+        let urutan = (index+1).toString().padStart(3, '0'); 
+        let nomorResi = `EXP-${randomKode}-${urutan}`; 
+        let bgColor = rec.layanan === 'Urgent Express' ? '#000000' : '#475569';
+
+        let asuransiText = ''; 
+        if (rec.asuransi === 'Ya') { 
+          let nilaiRupiah = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(rec.hargaBarang || 0); 
+          asuransiText = ` | ASURANSI: ${nilaiRupiah}`; 
+        }
+        
+        //PERBAIKAN LOGIKA CETAK RESI KARENA LABEL DITUKAR
+        let namaPenerimaCetak = rec.name; 
+        let alamatPenerimaCetak = rec.region === 'OTHER' ? rec.divisi : recAlamat;
+        let tujuanCetak = rec.region === 'OTHER' ? 'LUAR KOTA (EKSTERNAL)' : rec.region + ' - ' + rec.divisi;
+
+        html += `
+         <div class="label-page">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 8px;">
+                ${logoSrc && !logoSrc.endsWith('""') ? `<img src="${logoSrc}" style="max-height: 25px; max-width: 50%;">` : `<h2 style="margin:0; font-size: 18px; font-weight: 900; font-style: italic;">EXPRESS</h2>`}
+                <div style="text-align: right;"><div style="font-size: 10px; font-weight: 900; letter-spacing: 1px;">RESI PENGIRIMAN</div><div style="font-size: 8px; color: #333;">${waktuCetak}</div></div>
+            </div>
+            <div style="text-align: center; margin-bottom: 8px;"><svg class="barcode" jsbarcode-value="${nomorResi}" jsbarcode-height="38" jsbarcode-width="2" jsbarcode-fontsize="12" jsbarcode-margin="0" style="max-width: 100%;"></svg></div>
+            <div style="background-color: ${bgColor}; color: #ffffff; text-align: center; font-weight: 900; padding: 6px; font-size: 12px; text-transform: uppercase; margin-bottom: 8px; border-radius: 4px; letter-spacing: 1px; -webkit-print-color-adjust: exact; print-color-adjust: exact;">${rec.layanan}${asuransiText}</div>
+            <div style="border: 2px solid #000; border-radius: 6px; padding: 8px; margin-bottom: 8px; background-color: #f8fafc; -webkit-print-color-adjust: exact;">
+                <div style="font-size: 9px; color: #000; font-weight: bold; margin-bottom: 3px;">PENERIMA:</div><div style="font-size: 16px; font-weight: 900; line-height: 1.1; text-transform: uppercase;">${namaPenerimaCetak}</div>
+                <div style="font-size: 12px; font-weight: bold; margin-top: 4px; color: #1e293b;">TUJUAN: ${tujuanCetak}</div>
+                <div style="font-size: 10px; margin-top: 3px; line-height: 1.3; color: #334155;">${alamatPenerimaCetak}</div>
+            </div>
+            <div style="border: 1px solid #000; border-radius: 6px; padding: 6px; margin-bottom: 8px;">
+                <div style="font-size: 8px; color: #000; font-weight: bold; margin-bottom: 2px;">PENGIRIM:</div><div style="font-size: 12px; font-weight: bold;">${payload.senderName} <span style="font-size: 10px; font-weight: normal;">(${payload.senderPhone})</span></div>
+                <div style="font-size: 10px; margin-top: 2px;">${payload.senderDivisi} (CC: ${payload.senderCostCenter})</div>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-top: 2px dashed #000; border-bottom: 2px dashed #000; padding: 6px 0; margin-bottom: 10px;">
+                <div style="width: 50%; font-size: 10px; line-height: 1.5;"><div><strong>Isi:</strong> ${rec.jenisPaket}</div><div><strong>Jumlah:</strong> ${rec.qty} Koli/Pcs</div></div>
+                <div style="width: 50%; font-size: 10px; line-height: 1.5; text-align: right;"><div><strong>Packing:</strong> ${teksProteksi}</div><div><strong>Beban:</strong> ${payload.pembebanan}</div></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 8px;">
+                <div style="width: 40%; text-align: center;"><div style="font-size: 9px; font-weight: bold; margin-bottom: 30px;">Pengirim</div><div style="font-size: 10px; border-bottom: 1px solid #000; padding-bottom: 2px;">${payload.senderName}</div></div>
+                <div style="width: 40%; text-align: center;"><div style="font-size: 9px; font-weight: bold; margin-bottom: 30px;">Penerima</div><div style="font-size: 10px; border-bottom: 1px solid #000; padding-bottom: 2px;">( ...................................... )</div></div>
+            </div>
+         </div>
+        `;
+      });
+      tempDiv.innerHTML = html;
+      try { 
+        JsBarcode(".barcode").init(); 
+      } catch(e) {
+        console.log(e);
+      }
+
+      const renderedHTML = tempDiv.innerHTML; 
+      document.body.removeChild(tempDiv);
+
+      let iframe = document.getElementById('printFrame');
+      if (!iframe) { 
+        iframe = document.createElement('iframe'); 
+        iframe.id = 'printFrame'; 
+        iframe.style.position = 'fixed'; 
+        iframe.style.right = '0'; 
+        iframe.style.bottom = '0'; 
+        iframe.style.width = '0'; 
+        iframe.style.height = '0'; 
+        iframe.style.border = '0'; 
+        document.body.appendChild(iframe); 
+      }
+
+      let iframeDoc = iframe.contentWindow.document; 
+      iframeDoc.open();
+      iframeDoc.write(`
+        <!DOCTYPE html><html>
+          <head>
+            <title>Label Pengiriman - ${payload.empNumber}</title>
+            <style>
+              @page { 
+                size: A4 portrait; margin: 5mm; 
+              } 
+              body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #fff; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; display: flex; flex-wrap: wrap; align-content: flex-start; } * { box-sizing: border-box; } 
+              
+              .label-page { 
+                width: 96mm; height: 138mm; padding: 5mm; margin: 2mm; 
+                page-break-inside: avoid; position: relative; overflow: hidden; 
+                background: #fff; border: 1px dashed #64748b; 
+              }
+            </style>
+          </head>
+          <body>${renderedHTML}</body>
+        </html>
+      `);
+
+      iframeDoc.close();
+
+      setTimeout(() => {
+        showLoading(false);
+        Swal.fire({ 
+          title: 'Cetak Berhasil!', 
+          text: 'Data tersimpan dan Resi siap untuk dipotong.', 
+          icon: 'success', 
+          confirmButtonColor: '#4f46e5', 
+          timer: 3500, 
+          timerProgressBar: true 
+        });
+
+        iframe.contentWindow.focus(); 
+        iframe.contentWindow.print();
+
+        document.getElementById('shippingForm').reset(); 
+        document.getElementById('lblSenderCC').innerText = '-'; 
+        document.getElementById('lblSenderAlamat').innerText = '-';
+        
+        for (let key in tsInstances) tsInstances[key].clear(true); generateRecipientForms(1);
+      }, 500);
+    }
+
+    function downloadTemplate() {
+      const ws = XLSX.utils.aoa_to_sheet([["Tujuan_Region", "Tujuan_Divisi", "Nama_Penerima", "Jenis_Paket (Reguler Goods/Special Goods)", "Jumlah_Barang", "Asuransi(Ya/Tidak)", "Harga_Barang", "Packing_Kayu(Ya/Tidak)", "Packing_Bubble(Ya/Tidak)", "Layanan(Reguler/Urgent Express)"], ["STORE", "LSI PAMULANG", "Opick", "Reguler Goods", 2, "Tidak", "6500000", "Tidak", "Tidak", "Reguler"]]);
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Template"); XLSX.writeFile(wb, "Template_Bulk_Penerima.xlsx");
+    }
+
+    function exportData() {
+      showLoading(true, "Menarik Data Excel...");
+      google.script.run
+        .withFailureHandler(err => { showLoading(false); showErrorAlert("Gagal menarik data: " + err.message); })
+        .withSuccessHandler(dataArray => {
+          const ws = XLSX.utils.aoa_to_sheet(dataArray); const wscols = dataArray[0].map(() => ({wch: 20})); ws['!cols'] = wscols;
+          const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Data_Pengiriman"); const dateStr = new Date().toISOString().slice(0, 10); XLSX.writeFile(wb, "Laporan_Mailing_Services_" + dateStr + ".xlsx");
+          showLoading(false); Swal.fire({ icon: 'success', title: 'Sukses Diunduh!', text: 'File Excel (.xlsx) siap dibuka.', confirmButtonColor: '#10b981', timer: 2500 });
+        }).getExportData();
+    }
+
+    function showSection(id){
+        console.log("showSection, id = ", id);
+
+        ['app', 'viewDashboardSection'].forEach(s=>document.getElementById(s).classList.add('hidden'));
+        document.getElementById(id).classList.remove('hidden');
+    }
+
+    let dataTableInstance = null; 
+
+    //Jalankan saat halaman pertama kali dibuka untuk set default Today-Today
+    document.addEventListener("DOMContentLoaded", function() {
+      // 1. Ambil waktu sekarang (WIB)
+      const now = new Date();
+      
+      // 2. Buat objek tanggal baru khusus untuk Start Date (Today - 7)
+      const startDateObj = new Date();
+      startDateObj.setDate(now.getDate() - 7);
+
+      // 3. Fungsi pembantu untuk konversi ke Local ISO String (YYYY-MM-DD)
+      // fungsi agar tidak menulis rumus offset berulang kali
+      const toLocalISO = (dateObj) => {
+          const offset = dateObj.getTimezoneOffset() * 60000;
+          return new Date(dateObj - offset).toISOString().split('T')[0];
+      };
+
+      const startInput = document.getElementById('filterStartDate');
+      const endInput = document.getElementById('filterEndDate');
+      
+      if (startInput && endInput) {
+          const startDateValue = toLocalISO(startDateObj);
+          const endDateValue = toLocalISO(now);
+
+          startInput.value = startDateValue;
+          endInput.value = endDateValue;
+
+          //Set minimal End Date mengikuti Start Date (Today - 7)
+          endInput.min = startDateValue;
+      }
+    });
+
+function loadViewDashboardData() {
+  console.log("currentUser in loadViewDashboardData", currentUser);
+
+  const tableId = '#mainTable';
+  const tBody = document.getElementById('viewDashboardTable');
+  const start = document.getElementById('filterStartDate').value;
+  const end = document.getElementById('filterEndDate').value;
+
+  //Tampilkan section dashboard
+  showSection('viewDashboardSection');
+
+  //Jika DataTable sudah ada, hancurkan (destroy) dulu agar bisa diisi ulang
+  if ($.fn.DataTable.isDataTable(tableId)) {
+    $(tableId).DataTable().clear().destroy();
+  }
+
+  //Beri indikasi loading pada table body
+  tBody.innerHTML = '<tr><td colspan="7" class="p-10 text-center text-indigo-500 font-bold"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Mengambil data...</td></tr>';
+
+  //Panggil server-side Google Apps Script
+  google.script.run
+    .withFailureHandler(err => {
+      tBody.innerHTML = `<tr><td colspan="7" class="p-5 text-center text-red-500">Gagal memuat data: ${err.message}</td></tr>`;
+    })
+    .withSuccessHandler(function(response) {
+      console.log("view dashboard response",response);
+      let html = '';
+      
+      if (response && response.list && response.list.length > 0) {
+        response.list.forEach(i => {
+          const gKey = `${i.waktu}_${i.gmail}_${i.employeeNumber}_${i.emailSuperIndo}_${i.senderName}_${i.senderEmail}_${i.senderPhone}`;
+
+          html += `
+          <tr class="hover:bg-slate-50 transition">
+              <td class="p-3 border-b text-xs text-slate-600" data-order="${i.rawTime || ''}">${i.waktu}</td>
+              <td class="p-3 border-b text-sm text-slate-600">${i.emailSuperIndo || i.emailSuperindo || '-'}</td>
+              <td class="p-3 border-b text-sm font-bold text-slate-800">${i.senderName}</td>
+              <td class="p-3 border-b text-sm text-slate-600">${i.senderRegion || '-'}</td>
+              <td class="p-3 border-b text-sm text-slate-600">${i.senderDivisi || '-'}</td>
+              <td class="p-3 border-b text-center">
+                  <span class="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-bold">${i.totalRecipients} Paket</span>
+              </td>
+              <td class="p-3 border-b text-center">
+                <button onclick="viewDetail('${gKey}')" class="bg-slate-800 text-white px-4 py-1.5 rounded-lg text-xs hover:bg-black transition shadow-sm">
+                  <i class="fa-solid fa-magnifying-glass mr-1"></i> Detail
+                </button>
+              </td>
+          </tr>`;
+        });
+        tBody.innerHTML = html;
+
+        //Inisialisasi ulang DataTable setelah data masuk ke DOM
+        $(tableId).DataTable({
+          "order": [[0, "desc"]],
+          "pageLength": 10,
+          "language": {
+            "search": "Cari Data:",
+            "lengthMenu": "Tampilkan _MENU_ baris",
+            "zeroRecords": "Data tidak ditemukan",
+            "info": "Menampilkan _START_ sampai _END_ dari _TOTAL_ data",
+            "paginate": { "previous": "Sebelumnnya", "next": "Berikutnya" }
+          },
+          "retrieve": true,
+          "responsive": true
+        });
+      } else {
+        tBody.innerHTML = '<tr><td colspan="7" class="p-10 text-center text-slate-400 font-medium">Tidak ada history pengiriman pada rentang tanggal ini.</td></tr>';
+      }
+    })
+    .getDashboardData(start, end, currentUser);
+}
+
+function setMinEndDate() {
+  const startVal = document.getElementById('filterStartDate').value;
+  const endInput = document.getElementById('filterEndDate');
+  //Set minimal tanggal selesai adalah tanggal mulai yang dipilih
+  endInput.min = startVal; 
+  if (endInput.value < startVal) {
+    endInput.value = startVal;
+  }
+}
+
+function viewDetail(groupKey) {
+  showLoading(true, "Mengambil data transaksi...");
+
+  google.script.run
+    .withFailureHandler(err => {
+      showLoading(false);
+      showErrorAlert("Gagal memuat detail: " + err.message);
+    })
+    .withSuccessHandler(payload => {
+      showLoading(false);
+      if (payload) {
+        // Panggil fungsi cetak dengan payload yang sudah lengkap (Sender + Recipients)
+        generateNativePrint(payload);
+      } else {
+        showErrorAlert("Data tidak ditemukan atau rentang data terlalu lama.");
+      }
+    })
+    .getDetailTransaksi(groupKey); // Kirim groupKey tunggal ke server
+}
+
+// function viewDetail(waktu, email) {
+//   showLoading(true, "Mengambil data resi...");
+
+//   google.script.run
+//     .withFailureHandler(err => {
+//       showLoading(false);
+//       showErrorAlert("Gagal memuat detail: " + err.message);
+//     })
+//     .withSuccessHandler(payload => {
+//       showLoading(false);
+//       if (payload) {
+//         // Langsung panggil fungsi cetak bawaan yang sudah di buat sebelumnya
+//         generateNativePrint(payload);
+//       } else {
+//         showErrorAlert("Data tidak ditemukan.");
+//       }
+//     })
+//     .getDetailTransaksi(waktu, email);
+// }
+
+  </script>
