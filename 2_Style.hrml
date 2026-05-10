@@ -1,0 +1,162 @@
+<style>
+    body { 
+      background-color: #f8fafc; color: #334155; margin: 0; padding: 0; 
+    }
+    .glass-effect { 
+      background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); 
+    }
+    .loader { 
+      border-top-color: #4f46e5; animation: spinner 1s linear infinite; 
+    }
+    @keyframes spinner { 
+      0% { transform: rotate(0deg); } 
+      100% { transform: rotate(360deg); } 
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      75% { transform: translateX(5px); }
+    }
+
+    /* Efek kartu melayang untuk halaman tutup */
+    .closed-portal-card {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1);
+    }
+    
+    .status-badge-offline {
+        background: #fff1f2;
+        color: #e11d48;
+        border: 1px solid #ffe4e6;
+        padding: 4px 12px;
+        border-radius: 99px;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .animate-shake { 
+      animation: shake 0.2s ease-in-out 0s 2; 
+    }
+    .ts-wrapper .ts-control { 
+      border-radius: 0.5rem !important; 
+      padding: 0.6rem !important; 
+      border: 1px solid #cbd5e1 !important; 
+      background: #f8fafc !important; 
+    }
+    .ts-wrapper.focus .ts-control { 
+      border-color: #6366f1 !important; 
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2) !important; 
+      background: #fff !important; 
+    }
+    .premium-input { 
+      width: 100%; 
+      border: 1px solid #cbd5e1; 
+      border-radius: 0.5rem; 
+      padding: 0.6rem; 
+      font-size: 0.875rem; 
+      background: #f8fafc; 
+      transition: all 0.2s; 
+    }
+    .premium-input:focus { 
+      outline: none; 
+      border-color: #6366f1; 
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); 
+      background: #fff; 
+    }
+    .premium-label { 
+      display: block; 
+      font-size: 0.75rem; 
+      font-weight: 700; 
+      color: #475569; 
+      margin-bottom: 0.25rem; 
+      text-transform: uppercase; 
+      transition: all 0.3s; 
+    }
+    .swal2-title, .swal2-html-container { 
+      font-family: inherit !important; 
+    }
+  
+    /* Customize DataTables agar senada dengan Tailwind - added by felina*/
+    .dataTables_wrapper .dataTables_filter input { 
+      border: 1px solid #e5e7eb; 
+      border-radius: 0.5rem; 
+      padding: 0.4rem; 
+    }
+    .dataTables_wrapper .dataTables_length select { 
+      border: 1px solid #e5e7eb;
+      border-radius: 0.5rem; 
+    }
+    table.dataTable { border-collapse: collapse !important; }
+
+    /* Styling khusus untuk DataTable User Management */
+    #userTable_wrapper .dataTables_filter {
+        margin-bottom: 1rem;
+    }
+    #userTable_wrapper .dataTables_filter input {
+        margin-left: 0.5rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 0.75rem;
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+    }
+    #userTable_wrapper .dataTables_length select {
+        border: 1px solid #cbd5e1;
+        border-radius: 0.5rem;
+        padding: 0.25rem 0.5rem;
+    }
+    /* Animasi halus untuk display alamat */
+    .address-fade {
+        animation: fadeIn 0.4s ease-out;
+        display: block;
+        min-height: 1.25rem; /* Menjaga layout tidak loncat saat teks kosong */
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-5px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Mempercantik tampilan alamat di bawah dropdown */
+    .address-display {
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1.2;
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: #eef2ff; /* Indigo super light */
+        color: #4f46e5;
+        margin-top: 6px;
+        border-left: 3px solid #4f46e5;
+    }
+
+    @keyframes bounce-short {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-4px); }
+    }
+    .animate-bounce-short {
+        animation: bounce-short 3s ease-in-out infinite;
+    }
+
+    /* Memperjelas baris tabel saat di-hover untuk user awam */
+    #mainTableViewDashboard tbody tr:hover {
+        background-color: #f1f5f9 !important;
+        cursor: default;
+    }
+
+    /* Animasi glow halus untuk tombol riwayat */
+    .btn-history-glow {
+        transition: all 0.3s ease;
+        border: 1px solid transparent;
+    }
+
+    .btn-history-glow:hover {
+        background-color: #eef2ff; /* Indigo 50 */
+        border-color: #c7d2fe; /* Indigo 200 */
+        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.1);
+        transform: translateX(3px);
+    }
+  </style>
