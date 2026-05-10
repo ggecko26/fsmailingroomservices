@@ -1,0 +1,50 @@
+<!-- LOADER -->
+  <div id="loading" style="display:none;" class="glass-effect flex-col justify-center items-center">
+    <div class="loader rounded-full border-4 border-t-4 border-slate-200 h-16 w-16 mb-6"></div>
+    <p class="text-xl font-bold text-slate-700" id="loadingText">Memproses...</p>
+  </div>
+
+<!-- FAQ SECTION -->
+  <button onclick="openFAQ()" type="button" class="fixed bottom-8 right-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full p-4 shadow-2xl transition-all hover:scale-110 z-[90] flex items-center justify-center group cursor-pointer border-4 border-indigo-100">
+        <i class="fa-solid fa-circle-question text-2xl"></i>
+        <span class="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs group-hover:ml-3 transition-all duration-300 ease-in-out font-bold text-sm">Bantuan & FAQ</span>
+  </button>
+
+  <div id="faqModal" class="hidden fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm transition-opacity opacity-0" style="transition: opacity 0.3s ease;">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden transform scale-95  transition-transform" id="faqModalContent" style="transition: transform 0.3s ease;">
+
+        <div class="bg-indigo-600 px-6 py-4 flex justify-between items-center text-white">
+            <h3 class="font-bold text-lg"><i class="fa-solid fa-clipboard-question mr-2"></i> Pusat Bantuan (FAQ)</h3>
+            <button onclick="closeFAQ()" type="button" class="text-indigo-200 hover:text-white transition transform hover:rotate-90"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+
+        <div class="p-6 max-h-[65vh] overflow-y-auto space-y-4">
+
+            <div class="border-b border-slate-100 pb-4">
+                <h4 class="font-bold text-slate-800 text-sm mb-1"><i class="fa-solid fa-caret-right text-indigo-500 mr-2"></i> Kenapa maksimal hanya bisa upload 100 tujuan sekaligus?</h4>
+                <p class="text-sm text-slate-600 ml-4">Batas 100 tujuan per upload diterapkan untuk mencegah sistem mengalami <i>stuck loading</i> atau <i>crash</i> saat memproses data. Jika tujuan Anda lebih banyak dari itu, silakan bagi menjadi beberapa kali upload.</p>
+            </div>
+
+            <div class="border-b border-slate-100 pb-4">
+                <h4 class="font-bold text-slate-800 text-sm mb-1"><i class="fa-solid fa-caret-right text-indigo-500 mr-2"></i> Resi saya sering gagal potong atau error margin?</h4>
+                <p class="text-sm text-slate-600 ml-4">Pastikan settingan ukuran kertas pada printer Anda diatur secara presisi pada dimensi A4 <b>21x29,7cm</b> agar sensor pemotong otomatis (<i>gap sensor</i>) dapat bekerja optimal, Pastikan margin diatur agar tidak terpotong (misal 0cm
+                    untuk borderless) dan gunakan opsi "Fit to Printable Area" untuk PDF agar hasilnya sesuai</p>
+            </div>
+
+            <div class="border-b border-slate-100 pb-4">
+                <h4 class="font-bold text-slate-800 text-sm mb-1"><i class="fa-solid fa-caret-right text-indigo-500 mr-2"></i> Bagaimana cara Tracking Paket via Self-Service?</h4>
+                <p class="text-sm text-slate-600 ml-4">Pada beberapa resi, Anda bisa mengarahkan penerima untuk masuk ke portal Self-Service melalui URL yang tersedia, lalu input ID Unik yang ada pada resi paket tersebut.</p>
+            </div>
+
+            <div>
+                <h4 class="font-bold text-slate-800 text-sm mb-1"><i class="fa-solid fa-caret-right text-indigo-500 mr-2"></i> Divisi tujuan tidak ada di pilihan atau keluar region?</h4>
+                <p class="text-sm text-slate-600 ml-4">Pilih Region <b>OTHER</b>, lalu ketikkan nama penerima, nomor telpon beserta alamat lengkap,dan tujuan secara manual di kolom yang baru muncul.</p>
+            </div>
+
+        </div>
+
+        <div class="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-end">
+            <button onclick="closeFAQ()" type="button" class="bg-slate-800 hover:bg-black text-white font-bold py-2 px-6 rounded-xl shadow-md transition transform hover:-translate-y-0.5">Mengerti</button>
+        </div>
+    </div>
+  </div>
