@@ -1,0 +1,224 @@
+<!-- LOGIN SCRIPT FUNCTION -->
+<script>
+// <!-- LOGIN SECTION -->
+  function checkEmailPrivilege() {
+    const emailInput = document.getElementById('inputSuperindoEmail').value;
+    const passwordContainer = document.getElementById('passwordContainer');
+    const inputPassword = document.getElementById('inputPassword');
+
+    if (!emailInput) {
+      passwordContainer.classList.add('hidden');
+      return;
+    }
+
+    // Panggil server untuk cek apakah email ini butuh password (Admin/Owner)
+    google.script.run
+      .withSuccessHandler(role => {
+        if (role === 'Admin' || role === 'Owner') {
+          // Tampilkan input password jika user adalah Admin atau Owner
+          passwordContainer.classList.remove('hidden');
+          inputPassword.setAttribute('required', 'true');
+        } else {
+          // Sembunyikan jika hanya staff biasa
+          passwordContainer.classList.add('hidden');
+          inputPassword.removeAttribute('required');
+          inputPassword.value = ''; // Kosongkan password jika sebelumnya terisi
+        }
+      })
+      .getUserRoleOnly(emailInput); // Fungsi ini harus ada di Code.gs (Server Side)
+  }
+
+  // Fungsi tambahan untuk toggle lihat password (opsional agar icon mata berfungsi)
+  function togglePassword() {
+    const passwordInput = document.getElementById('inputPassword');
+    const eyeIcon = document.getElementById('eyeIcon');
+    
+    if (passwordInput.type === 'password') {
+      passwordInput.type = 'text';
+      eyeIcon.classList.remove('fa-eye');
+      eyeIcon.classList.add('fa-eye-slash');
+    } else {
+      passwordInput.type = 'password';
+      eyeIcon.classList.remove('fa-eye-slash');
+      eyeIcon.classList.add('fa-eye');
+    }
+  }
+// 1. Fungsi saat user selesai ketik email (onblur)
+// 1. Fungsi deteksi email tetap ada untuk memunculkan field password (UX saja)
+function deteksiEmail() {
+  console.log("masuk deteksiEmail");
+  const email = document.getElementById('inputSuperindoEmail').value.trim();
+  const wadahPassword = document.getElementById('wadahPassword');
+  
+  if (!email) return;
+
+  // Optimasi: Kita panggil cekRole hanya untuk menentukan UI (Password muncul atau tidak)
+  google.script.run
+    .withSuccessHandler(function(role) {
+      console.log("role : ",role);
+      if (role === 'Admin' || role === 'Owner') {
+        wadahPassword.classList.remove('hidden');
+      } else {
+        wadahPassword.classList.add('hidden');
+      }
+    })
+    .cekRoleEmail(email); 
+}
+
+function attemptLogin() {
+      console.log("masuk attemptLogin : ",attemptLogin);
+  const emailInput = document.getElementById('inputSuperindoEmail').value.trim();
+  const passwordInput = document.getElementById('inputPassword').value;
+  const btn = document.getElementById('btnEnter');
+  const errorBox = document.getElementById('loginError');
+
+  if (!emailInput) return showErrorAlert("Masukkan email Anda");
+
+  // UI Loading
+  btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> <span>Memproses...</span>';
+  btn.disabled = true;
+  errorBox.classList.add('hidden');
+
+  // Langsung tembak verifikasi (Server akan menangani apakah butuh password atau tidak)
+  google.script.run
+    .withFailureHandler(err => {
+      btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> <span>Masuk Portal</span>';
+      btn.disabled = false;
+      errorBox.innerHTML = `<i class="fa-solid fa-circle-exclamation mr-1"></i> ${err.message}`;
+      errorBox.classList.remove('hidden');
+      btn.classList.add('animate-shake');
+      setTimeout(() => btn.classList.remove('animate-shake'), 500);
+    })
+    .withSuccessHandler(info => {
+      currentUser = info;
+      lanjutkanKePortal(info);
+    })
+    .verifyUserLogin(emailInput, passwordInput);
+}
+
+  function lanjutkanKePortal(info) {
+    // Simpan data user ke variabel global agar bisa diakses fungsi lain
+    currentUser = info;
+
+    let roleBadge = `<span class="bg-slate-200 text-slate-800 px-2 py-0.5 rounded text-[10px] ml-2 uppercase">${info.role}</span>`;
+    document.getElementById('userInfoDisplay').innerHTML = `${info.superindoEmail.split('@')[0]} ${roleBadge}`;
+    
+    // Tampilkan App Utama
+    document.getElementById('app').classList.remove('hidden'); 
+
+    // --- LOGIKA JAM OPERASIONAL ---
+    const isOperational = (info.serverHour >= 8 && info.serverHour < 15);
+    const isStaff = (info.role === 'Staff');
+
+    if (isStaff && !isOperational) {
+      // UI Modern saat portal ditutup
+      document.getElementById('shippingForm').innerHTML = `
+        <div class="relative overflow-hidden rounded-[2.5rem] bg-slate-50 border border-slate-200 shadow-inner my-8">
+          <div class="absolute -top-24 -right-24 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl"></div>
+          <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-rose-500/5 rounded-full blur-3xl"></div>
+
+          <div class="relative flex flex-col items-center justify-center py-20 px-6 text-center">
+            <div class="relative mb-8">
+              <div class="w-24 h-24 bg-white rounded-3xl shadow-xl flex items-center justify-center text-4xl text-slate-400 rotate-3 animate-pulse">
+                  <i class="fa-solid fa-clock-rotate-left"></i>
+              </div>
+              <div class="absolute -bottom-2 -right-2 w-10 h-10 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-lg border-4 border-white">
+                  <i class="fa-solid fa-lock text-xs"></i>
+              </div>
+            </div>
+
+            <div class="status-badge-offline mb-4">
+              Service Temporarily Closed
+            </div>
+
+            <h2 class="text-3xl font-black text-slate-800 mb-3 tracking-tight">
+              Waktu Istirahat <span class="text-indigo-600 font-extrabold">Sistem</span>
+            </h2>
+            <p class="text-slate-500 max-w-md mx-auto font-medium leading-relaxed mb-8">
+              Halo <span class="text-slate-800 font-bold">${info.superindoEmail.split('@')[0]}</span>, portal input resi saat ini sedang dalam mode 
+              <span class="font-bold">Maintenance/Istirahat</span>.
+            </p>
+
+            <div class="grid grid-cols-2 gap-4 w-full max-w-sm mb-10">
+              <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                  <p class="text-[10px] font-black text-slate-400 uppercase mb-1">Buka Kembali</p>
+                  <p class="text-lg font-bold text-indigo-600">08:00 <span class="text-xs text-slate-400">WIB</span></p>
+              </div>
+              <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                  <p class="text-[10px] font-black text-slate-400 uppercase mb-1">Batas Input</p>
+                  <p class="text-lg font-bold text-rose-500">15:00 <span class="text-xs text-slate-400">WIB</span></p>
+              </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-4 w-full justify-center">
+              <button type="button" onclick="loadViewDashboardData()" 
+                      class="bg-slate-800 hover:bg-slate-900 text-white px-8 py-4 rounded-2xl font-bold transition-all shadow-lg shadow-slate-200 flex items-center justify-center gap-3 active:scale-95">
+                  <i class="fa-solid fa-chart-pie"></i>
+                  Lihat Dashboard & Riwayat
+              </button>
+              <button type="button" onclick="openFAQ()" 
+                      class="bg-white border border-slate-200 text-slate-600 px-8 py-4 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-3">
+                  <i class="fa-solid fa-circle-question"></i>
+                  Pusat Bantuan
+              </button>
+            </div>
+
+            <p class="mt-12 text-[11px] text-slate-400 font-medium">
+              <i class="fa-solid fa-shield-halved mr-1"></i> 
+                Keamanan data tetap terjaga. Anda masih dapat mencetak ulang resi melalui menu Dashboard.
+            </p>
+          </div>
+        </div>
+      `;
+    }
+
+    // Tampilkan menu khusus Admin/Owner
+    if(info.role === 'Admin' || info.role === 'Owner') {
+       document.getElementById('adminGroup').classList.remove('hidden');
+       document.getElementById('adminGroup').classList.add('flex');
+       document.getElementById('btnAdminExport').onclick = exportData;
+       document.getElementById('btnAdminExport').classList.remove('hidden'); 
+       document.getElementById('btnManageUsers').classList.remove('hidden');
+       document.getElementById('btnManageMaster').classList.remove('hidden');
+    }
+
+    if(info.role === 'Owner') {
+       const logoBtn = document.getElementById('btnUploadLogo');
+       logoBtn.classList.remove('hidden'); 
+       logoBtn.classList.add('flex');
+    }
+
+    if (info.logo) applyLogo(info.logo);
+
+    // Animasi Transisi Login ke Portal
+    const loginScreen = document.getElementById('loginScreen');
+    const appWrapper = document.getElementById('mainPortalWrapper');
+
+    loginScreen.classList.add('opacity-0', '-translate-y-10');
+    setTimeout(() => {
+        loginScreen.style.display = 'none'; 
+        appWrapper.classList.remove('hidden'); 
+
+        setTimeout(() => { 
+          appWrapper.classList.remove('opacity-0'); 
+        }, 50);
+
+        showLoading(true, "Mempersiapkan Portal...");
+        google.script.run
+          .withFailureHandler(err => { showLoading(false); showErrorAlert("Gagal memuat Data Master: " + err.message); })
+          .withSuccessHandler(function(data) {
+              masterDivisi = data; 
+              // Hanya jalankan generate jika form tidak diblokir (bukan Restricted Staff)
+              if (!(isStaff && !isOperational)) {
+                generateRecipientForms(1); 
+              }
+              showLoading(false);
+              Swal.fire({ 
+                toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, 
+                icon: 'success', title: `Selamat datang!` 
+              });
+          }).getMasterDivisi();
+    }, 700);
+  }
+</script>
+
