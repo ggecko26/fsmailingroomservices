@@ -1,0 +1,362 @@
+<script>
+  // 1. Fungsi Utama Memuat Data & Inisialisasi DataTable
+  function loadUserManagementData() {
+    const tableId = '#userTable';
+    showSection('userManagementSection');
+
+    // Tampilkan loading manual pada body tabel sebelum data datang
+    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="5" class="p-10 text-center text-indigo-500 font-bold"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Sinkronisasi User...</td></tr>';
+
+    if ($.fn.DataTable.isDataTable(tableId)) {
+        $(tableId).DataTable().clear().destroy();
+    }
+
+    google.script.run
+        .withSuccessHandler(users => {
+            renderUserTable(users);
+
+            $(tableId).DataTable({
+                "order": [[3, "desc"]], 
+                "pageLength": 10,
+                "columnDefs": [
+                    { "searchable": false, "orderable": false, "targets": [4] } // Kolom Aksi tetap off
+                ],
+                "language": {
+                    "search": "Cari Data:",
+                    // "searchPlaceholder": "Cari Nama, Role, atau Status...",
+                    "lengthMenu": "_MENU_",
+                    "info": "Menampilkan _START_ - _END_ dari _TOTAL_ user",
+                    "paginate": { "previous": "<i class='fa-solid fa-chevron-left'></i>", "next": "<i class='fa-solid fa-chevron-right'></i>" }
+                },
+                "retrieve": true,
+                "responsive": true,
+            });
+        })
+        .getAllUsers();
+  }
+
+  function addNewUserPrompt() {
+    Swal.fire({
+        title: 'Tambah User Baru',
+        input: 'email',
+        inputLabel: 'Email Superindo (@superindo.co.id)',
+        inputPlaceholder: 'nama.karyawan@superindo.co.id',
+        showCancelButton: true,
+        confirmButtonText: 'Daftarkan',
+        confirmButtonColor: '#4f46e5',
+        preConfirm: (email) => {
+            if (!email.endsWith('@superindo.co.id')) {
+                Swal.showValidationMessage('Harus menggunakan email @superindo.co.id');
+            }
+            return email;
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            showLoading(true, "Mendaftarkan user...");
+            google.script.run
+                .withFailureHandler(err => {
+                    showLoading(false);
+                    // Tampilkan pesan error jika email duplikat atau ada kendala koneksi
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Gagal Menambah User',
+                        text: err.message,
+                        confirmButtonColor: '#4f46e5'
+                    });
+                })
+                .withSuccessHandler(() => {
+                    showLoading(false);
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Berhasil!',
+                        text: 'User baru telah ditambahkan ke database.',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                    loadUserManagementData(); // Refresh tabel
+                })
+                .addNewUser(result.value);
+        }
+    });
+  }
+
+  /**
+ * Update Role User berdasarkan Email
+ */
+  function updateUserRole(email, newRole) {
+    try {
+      var queryParams = "?email=eq." + encodeURIComponent(email);
+      var payload = { 
+        role: newRole,
+        updated_at: new Date().toISOString() // Update timestamp otomatis
+      };
+      
+      return callSupabase("users", "PATCH", payload, queryParams);
+    } catch (err) {
+      throw new Error("Gagal update role: " + err.message);
+    }
+  }
+
+  function deleteUserPrompt(email) {
+    Swal.fire({
+        title: 'Cabut Akses Pengguna?',
+        html: `Anda akan menghapus akses untuk: <br><b class="text-indigo-600">${email}</b><br><br><span class="text-xs text-red-500 font-semibold italic">Tindakan ini tidak dapat dibatalkan.</span>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444', // Merah Slate
+        cancelButtonColor: '#64748b',  // Abu-abu Slate
+        confirmButtonText: '<i class="fa-solid fa-trash-can mr-2"></i> Ya, Hapus Akses',
+        cancelButtonText: 'Batalkan',
+        reverseButtons: true,
+        customClass: {
+            confirmButton: 'rounded-xl px-6 py-3 font-bold',
+            cancelButton: 'rounded-xl px-6 py-3 font-bold'
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            showLoading(true, "Menghapus data di Supabase...");
+            google.script.run
+                .withFailureHandler(err => {
+                    showLoading(false);
+                    showErrorAlert("Gagal menghapus: " + err.message);
+                })
+                .withSuccessHandler(() => {
+                    showLoading(false);
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Akses Dicabut',
+                        text: 'Pengguna telah dihapus dari sistem.',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                    loadUserManagementData(); // Refresh tabel
+                })
+                .deleteUser(email); 
+        }
+    });
+  }
+
+  // Fungsi ini dipanggil saat dropdown/tombol status diubah di tabel
+  // 3. Update Status dengan SweetAlert2
+  function handleStatusChange(email, newStatus, selectEl) {
+    // Gunakan selectEl yang dikirim dari parameter, bukan window.event
+    const originalStatus = selectEl.getAttribute('data-original') || 'Active';
+
+    Swal.fire({
+        title: 'Ubah Status User?',
+        html: `Ubah status <b>${email}</b> menjadi <span class="uppercase font-bold">${newStatus}</span>?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#4f46e5',
+        confirmButtonText: 'Ya, Update!',
+        cancelButtonText: 'Batal'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            showLoading(true, "Menyimpan status...");
+            google.script.run
+                .withSuccessHandler(() => {
+                    showLoading(false);
+                    Swal.fire({ 
+                        toast: true, 
+                        position: 'top-end', 
+                        icon: 'success', 
+                        title: 'Status diperbarui', 
+                        showConfirmButton: false, 
+                        timer: 2000 
+                    });
+                    // JIKA BERHASIL: Refresh tabel untuk update timestamp & class warna
+                    loadUserManagementData();
+                })
+                .withFailureHandler(err => {
+                    showLoading(false);
+                    // JIKA GAGAL: Kembalikan ke posisi awal
+                    selectEl.value = originalStatus;
+                    showErrorAlert(err.message);
+                })
+                .updateUserStatus(email, newStatus);
+        } else {
+            // JIKA BATAL: Langsung balikin value tanpa refresh
+            selectEl.value = originalStatus;
+        }
+    });
+  }
+
+  // Fungsi untuk refresh tabel (memanggil ulang data dari database)
+  function refreshUserTable() {
+    google.script.run
+      .withSuccessHandler(function(users) {
+        renderUserTable(users); // Pastikan Anda punya fungsi renderUserTable untuk menggambar ulang baris tabel
+      })
+      .getAllUsers();
+  }
+
+  // 2. Fungsi Render Baris Tabel
+function renderUserTable(users) {
+    const tableBody = document.getElementById('userTableBody');
+    if (!tableBody) return;
+    tableBody.innerHTML = ''; 
+
+    users.forEach(u => {
+        const isYou = u.email === currentUser.superindoEmail;
+        const statusColor = u.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700';
+        
+        const isAdminLogged = currentUser.role === 'Admin';
+        const isTargetOwner = u.role === 'Owner';
+        const isRestricted = isAdminLogged && isTargetOwner; 
+
+        const dateObj = u.updatedAt ? new Date(u.updatedAt) : null;
+        const formattedDate = dateObj ? dateObj.toLocaleString('id-ID', { 
+            day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' 
+        }) : "-";
+        const rawTimestamp = dateObj ? dateObj.getTime() : 0;
+
+        tableBody.insertAdjacentHTML('beforeend', `
+            <tr class="hover:bg-slate-50 transition group border-b border-slate-50">
+                <td class="p-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold border border-indigo-100">
+                            ${(u.email || "?").charAt(0).toUpperCase()}
+                        </div>
+                        <div class="flex flex-col">
+                            <span class="font-bold text-slate-700">${u.email}</span>
+                            ${isYou ? '<span class="text-[9px] font-black text-indigo-500 uppercase italic">Anda sedang login</span>' : ''}
+                        </div>
+                    </div>
+                </td>
+                
+                <td class="p-4" data-search="${u.role}" data-order="${u.role}">
+                    <select onchange="handleRoleChange('${u.email}', this.value, this)" 
+                            data-original="${u.role}"
+                            ${isYou || isRestricted ? 'disabled' : ''} 
+                            class="bg-white border border-slate-200 rounded-lg text-xs font-bold p-2 outline-none ${isYou || isRestricted ? 'opacity-50 cursor-not-allowed' : ''}">
+                        <option value="Staff" ${u.role === 'Staff' ? 'selected' : ''}>Staff</option>
+                        <option value="Admin" ${u.role === 'Admin' ? 'selected' : ''}>Admin</option>
+                        ${!isAdminLogged ? `<option value="Owner" ${u.role === 'Owner' ? 'selected' : ''}>Owner</option>` : (u.role === 'Owner' ? '<option value="Owner" selected>Owner</option>' : '')}
+                    </select>
+                </td>
+
+                <td class="p-4" data-search="${u.status}" data-order="${u.status}">
+                    <select onchange="handleStatusChange('${u.email}', this.value, this)" 
+                            data-original="${u.status}"
+                            ${isRestricted ? 'disabled' : ''}
+                            class="${statusColor} border-none rounded-full px-3 py-1 text-[10px] font-black uppercase appearance-none text-center ${isRestricted ? 'opacity-50 cursor-not-allowed' : ''}">
+                        <option value="Active" ${u.status === 'Active' ? 'selected' : ''}>Active</option>
+                        <option value="Inactive" ${u.status === 'Inactive' ? 'selected' : ''}>Inactive</option>
+                    </select>
+                </td>
+
+                <td class="p-4 text-slate-400" data-order="${rawTimestamp}">
+                    <span class="text-[11px] font-medium"><i class="fa-regular fa-clock mr-1"></i> ${formattedDate}</span>
+                </td>
+                <td class="p-4 text-center">
+                    <div class="flex justify-center gap-2">
+                        <button onclick="changePasswordPrompt('${u.email}')" 
+                                ${isRestricted ? 'disabled' : ''}
+                                class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-500 hover:text-white transition flex items-center justify-center shadow-sm">
+                            <i class="fa-solid fa-key text-xs"></i>
+                        </button>
+                        ${(!isYou && !isRestricted) ? `
+                            <button onclick="deleteUserPrompt('${u.email}')" class="w-8 h-8 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white transition flex items-center justify-center shadow-sm">
+                                <i class="fa-solid fa-user-minus text-xs"></i>
+                            </button>
+                        ` : `
+                            <div class="w-8 h-8 flex items-center justify-center text-slate-300"><i class="fa-solid fa-lock text-xs"></i></div>
+                        `}
+                    </div>
+                </td>
+            </tr>`);
+    });
+  }
+
+  function handleRoleChange(email, newRole) {
+    const selectEl = event.target;
+    const originalRole = selectEl.getAttribute('data-original');
+
+    // Validasi tambahan
+    if (currentUser.role === 'Admin' && originalRole === 'Owner') {
+        showErrorAlert("Otoritas tidak cukup: Admin tidak dapat mengubah role Owner.");
+        selectEl.value = originalRole;
+        return;
+    }
+
+    Swal.fire({
+        title: 'Ubah Role?',
+        text: `Ubah level akses ${email} menjadi ${newRole}?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#4f46e5',
+        confirmButtonText: 'Ya, Ubah',
+        cancelButtonText: 'Batal'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            showLoading(true, "Memperbarui Role...");
+            google.script.run
+                .withSuccessHandler(() => {
+                    showLoading(false);
+                    // Karena ada yang berubah (Role & Tanggal), kita refresh tabelnya
+                    loadUserManagementData(); 
+                    
+                    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Role Berhasil Diubah', showConfirmButton: false, timer: 2000 });
+                })
+                .withFailureHandler(err => {
+                    showLoading(false);
+                    selectEl.value = originalRole; // Kembalikan ke asal jika error server
+                    showErrorAlert(err.message);
+                })
+                .updateUserRole(email, newRole);
+        } else {
+            // JIKA BATAL: Cukup balikin value tanpa panggil server/refresh
+            selectEl.value = originalRole;
+        }
+    });
+  }
+
+  function changePasswordPrompt(email) {
+    Swal.fire({
+        title: 'Ganti Password User',
+        html: `Atur password baru untuk:<br><b class="text-indigo-600">${email}</b>`,
+        input: 'password',
+        inputLabel: 'Password Baru',
+        inputPlaceholder: 'Masukkan password minimal 6 karakter',
+        inputAttributes: {
+            autocapitalize: 'off',
+            autocorrect: 'off'
+        },
+        showCancelButton: true,
+        confirmButtonText: 'Update Password',
+        confirmButtonColor: '#f59e0b', // Warna Amber agar beda dengan tombol simpan biasa
+        cancelButtonText: 'Batal',
+        showLoaderOnConfirm: true,
+        preConfirm: (newPassword) => {
+            if (!newPassword || newPassword.length < 6) {
+                Swal.showValidationMessage('Password minimal 6 karakter!');
+                return false;
+            }
+            return newPassword;
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            showLoading(true, "Memperbarui keamanan...");
+            google.script.run
+                .withFailureHandler(err => {
+                    showLoading(false);
+                    showErrorAlert(err.message);
+                })
+                .withSuccessHandler(() => {
+                    showLoading(false);
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Password Diperbarui',
+                        text: `Password untuk ${email} telah berhasil diganti.`,
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                    // Tidak perlu refresh tabel (loadUserManagementData) 
+                    // karena kolom password tidak ditampilkan di tabel.
+                })
+                .updateUserPassword(email, result.value);
+        }
+    });
+  }
+
+</script>
