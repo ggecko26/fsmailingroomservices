@@ -1,0 +1,74 @@
+<script>
+  // ATUR CURRENT / HIDDEN PAGE OR SECTION
+  function showSection(id){
+    [ 
+      'app', 
+      'viewDashboardSection', 
+      'userManagementSection', 
+      'masterDivisiSection',
+    ].forEach(s => {
+        const el = document.getElementById(s);
+        if(el) el.classList.add('hidden');
+    });
+    document.getElementById(id).classList.remove('hidden');
+  }
+
+  
+  // UPDATE LOGO SECTION (FOR ROLE OWNER)
+  function handleLogoUpload(e) {
+    const file = e.target.files[0]; 
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) return showErrorAlert("Ukuran logo maksimal 2MB.");
+
+    showLoading(true, "Mengunggah Logo...");
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+      google.script.run
+        .withFailureHandler(err => { 
+          showLoading(false); 
+          showErrorAlert("Gagal simpan logo: " + err.message); 
+        })
+        .withSuccessHandler(res => { 
+          applyLogo(evt.target.result); 
+          showLoading(false); 
+          Swal.fire({ 
+            icon: 'success', 
+            title: 'Berhasil!', 
+            text: res, 
+            timer: 2000, 
+            showConfirmButton: false 
+          }); 
+        }).saveLogo(evt.target.result);
+    }; 
+    
+    reader.readAsDataURL(file);
+  }
+
+  function applyLogo(base64) { 
+    document.getElementById('defaultLogo').classList.add('hidden'); 
+    document.getElementById('mainLogo').src = base64; 
+    document.getElementById('mainLogo').classList.remove('hidden'); 
+  }
+
+  // EXPORT ALL DATA (FOR ROLE ADMIN / OWNER)
+  function exportData() {
+    showLoading(true, "Menarik Data Excel...");
+    google.script.run
+      .withFailureHandler(err => { showLoading(false); showErrorAlert("Gagal menarik data: " + err.message); })
+      .withSuccessHandler(dataArray => {
+        const ws = XLSX.utils.aoa_to_sheet(dataArray); 
+        const wscols = dataArray[0].map(() => ({wch: 20})); ws['!cols'] = wscols;
+
+        const wb = XLSX.utils.book_new(); 
+        XLSX.utils.book_append_sheet(wb, ws, "Data_Pengiriman"); 
+        
+        const dateStr = new Date().toISOString().slice(0, 10); 
+        XLSX.writeFile(wb, "Laporan_Mailing_Services_" + dateStr + ".xlsx");
+
+        showLoading(false); 
+        Swal.fire({ icon: 'success', title: 'Sukses Diunduh!', text: 'File Excel (.xlsx) siap dibuka.', confirmButtonColor: '#10b981', timer: 2500 });
+      }).getExportData();
+  }
+</script>
