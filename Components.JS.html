@@ -1,0 +1,36 @@
+<script>
+  function openFAQ() {
+    const modal = document.getElementById('faqModal');
+    const content = document.getElementById('faqModalContent');
+    
+    //ELEMENT
+    if (modal && content) {
+      modal.classList.remove('hidden');
+      //JEDA 10MS BUAT TRANSISI
+      setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        content.classList.remove('scale-95');
+        content.classList.add('scale-100');
+      }, 10);
+    } else {
+      console.error("Elemen FAQ tidak ditemukan di HTML!");
+    }
+  }
+  
+  function closeFAQ() {
+    const modal = document.getElementById('faqModal');
+    const content = document.getElementById('faqModalContent');
+    
+    if (modal && content) {
+      modal.classList.add('opacity-0');
+      content.classList.remove('scale-100');
+      content.classList.add('scale-95');
+      
+      //TUNGGU ANIMASI 300MS ABIS ITU NGUMPET
+      setTimeout(() => {
+        modal.classList.add('hidden');
+      }, 300);
+    }
+  }
+
+</script>
