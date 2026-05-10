@@ -1,0 +1,1009 @@
+<script>
+    // TEMPLATE EXCEL MASSIVE UPLOAD INPUT TRANSACTION (MAIN APP)
+  function downloadTemplate() { 
+    const headers = [
+      "Tujuan_Region",
+      "Tujuan_Divisi/Alamat Lengkap Tujuan untuk Region OTHER",
+      "Nama_Penerima",
+      "No_HP_Penerima",
+      "Jenis_Paket (Document/Non Document)",
+      "Detail_Paket",
+      "Jumlah_Barang",
+      "Asuransi(Ya/Tidak)",
+      "Harga_Barang",
+      "Packing_Kayu(Ya/Tidak)",
+      "Packing_Bubble(Ya/Tidak)",
+      "Layanan(Reguler/Urgent Express)"
+    ];
+    const data = [
+      headers,
+      ["STORE", "LSI PAMULANG", "Opick", "", "Document", "Surat Keterangan Sehat", 2, "Tidak", "6500000", "Tidak", "Tidak", "Reguler"]
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    /* --- BAGIAN PENGATURAN LEBAR KOLOM --- */
+    // Kita hitung karakter terpanjang di setiap kolom
+    const colWidths = headers.map(h => {
+      return { wch: h.length + 5 }; // wch adalah width in characters, ditambah 5 agar ada padding/jarak
+    });
+    
+    ws['!cols'] = colWidths;
+    /* ------------------------------------ */
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Template");
+    XLSX.writeFile(wb, "Template_Bulk_Penerima.xlsx");
+  }
+
+  // INPUT TRANSACTION SECTION (MAIN APP SECTION)
+  function checkCSO() {
+    document.getElementById('pembebananContainer').classList.toggle('hidden', document.getElementById('senderRegion').value !== 'CSO');
+    if(document.getElementById('senderRegion').value !== 'CSO') document.getElementById('pembebanan').value = 'Pengirim';
+  }
+
+  //CEGAH UPLOAD SEBELUM ISI DATA PENGIRIM
+  function checkSenderDataFirst(e) {
+    const isFilled = document.getElementById('empNumber').value && 
+                     document.getElementById('senderName').value && 
+                     document.getElementById('senderEmail').value && 
+                     document.getElementById('senderPhone').value && 
+                     document.getElementById('senderRegion').value;
+    
+    if(!isFilled) {
+        e.preventDefault(); //BATALKEUN BUKA WINDOW UPLOAD FILE
+        Swal.fire({ 
+          icon: 'warning', 
+          title: 'Data Pengirim Kosong', 
+          text: 'Harap lengkapi Formulir Informasi Pengirim terlebih dahulu sebelum melakukan Upload Massal.', confirmButtonColor: '#4f46e5' 
+        });
+        return false;
+    }
+    return true;
+  }
+
+  function loadDivisi(type, index = null) {
+    const isSender = type === 'sender';
+    const regionVal = document.getElementById(isSender ? 'senderRegion' : `recRegion_${index}`).value;
+    const selectDivisi = document.getElementById(isSender ? 'senderDivisi' : `recDivisi_${index}`);
+    const inputOther = document.getElementById(isSender ? 'senderDivisiOther' : `recDivisiOther_${index}`);
+    
+    // Reset TomSelect instance jika ada
+    if(tsInstances[selectDivisi.id]) { 
+        tsInstances[selectDivisi.id].destroy(); 
+        delete tsInstances[selectDivisi.id]; 
+    }
+    selectDivisi.innerHTML = '<option value="">-- Ketik/Pilih --</option>';
+
+    // Logic khusus Recipient (Penerima)
+    if(!isSender) {
+        const phoneWrapper = document.getElementById(`wrapperPhone_${index}`);
+        const phoneInput = document.getElementById(`recPhone_${index}`);
+        const lblDivisi = document.getElementById(`lblRecDivisi_${index}`);
+        const lblName = document.getElementById(`lblRecName_${index}`);
+        const recNameInput = document.getElementById(`recName_${index}`);
+        const displayAlamat = document.getElementById(`lblRecAlamatDisplay_${index}`);
+        const infoChar = document.getElementById(`infoCharOther_${index}`);
+
+        if(displayAlamat) displayAlamat.innerHTML = ''; 
+
+        // Toggle tampilan berdasarkan Region OTHER
+        const isOther = regionVal === 'OTHER';
+        inputOther.classList.toggle('hidden', !isOther);
+
+        if(isOther) {
+            if(infoChar) infoChar.classList.toggle('hidden', !isOther);
+
+            recNameInput.setAttribute('maxlength', '50'); // Batasi 50 karakter
+            inputOther.setAttribute('maxlength', '200'); // Batasi 200 karakter
+            phoneInput.setAttribute('oninput', "this.value = this.value.replace(/[^0-9]/g, '')"); // Paksa hanya angka
+        }
+
+        selectDivisi.classList.toggle('hidden', isOther);
+        phoneWrapper.classList.toggle('hidden', !isOther);
+        
+        inputOther.required = isOther;
+        selectDivisi.required = !isOther;
+        phoneInput.required = isOther;
+
+        // Update Label
+        lblDivisi.innerText = isOther ? 'ALAMAT LENGKAP TUJUAN *' : 'Divisi *';
+        lblDivisi.classList.toggle('text-indigo-600', isOther);
+        lblName.innerText = isOther ? 'NAMA PENERIMA *' : 'Penerima *';
+        lblName.classList.toggle('text-indigo-600', isOther);
+
+        if(!isOther && regionVal) {
+            populateDivisiOptions(selectDivisi, regionVal, index);
+        }
+    } 
+    // Logic khusus Sender (Pengirim)
+    else if (regionVal) {
+        populateDivisiOptions(selectDivisi, regionVal, null, true);
+    }
+  }
+
+  // Fungsi pembantu agar tidak duplikasi loop
+  function populateDivisiOptions(selectEl, region, index, isSender = false) {
+    masterDivisi.filter(d => d.region === region).forEach(d => {
+        selectEl.innerHTML += `<option value="${d.divisi}" data-cc="${d.costCenter}" data-alamat="${d.alamat}">${d.divisi}</option>`;
+    });
+
+    tsInstances[selectEl.id] = new TomSelect('#' + selectEl.id, {
+        create: false,
+        sortField: "text",
+        placeholder: "Ketik pencarian...",
+        onChange: () => isSender ? autoFillSenderCC() : autoFillRecipientAddress(index)
+    });
+  }
+
+  function autoFillSenderCC() {
+    const sel = document.getElementById('senderDivisi');
+    if(sel && sel.selectedIndex >= 0 && sel.value) {
+      const option = sel.options[sel.selectedIndex];
+      document.getElementById('lblSenderCC').innerText = option.getAttribute('data-cc') || '-';
+      document.getElementById('lblSenderAlamat').innerText = option.getAttribute('data-alamat') || '-';
+    }
+  }
+
+  function addNewRecipientCard() {
+    const container = document.getElementById('recipientsContainer');
+    const currentCards = document.querySelectorAll('.recipient-card').length;
+
+    // if (currentCards >= 100) {
+    //   return Swal.fire({
+    //       icon: 'warning',
+    //       title: 'Batas Maksimal',
+    //       text: 'Maksimal pengiriman adalah 100 tujuan dalam satu transaksi.',
+    //       confirmButtonColor: '#4f46e5'
+    //   });
+    // }
+
+    cardCounterId++; // Naikkan ID unik global
+    
+    // Gunakan insertAdjacentHTML agar tidak merusak instance TomSelect yang sudah ada di kartu lain
+    container.insertAdjacentHTML('beforeend', createRecipientHTML(cardCounterId));
+    
+    // Update nilai dropdown jumlah tujuan agar sinkron
+    document.getElementById('jumlahTujuan').value = currentCards + 1;
+    
+    reindexCardTitles();
+  }
+
+  //PEMBUATAN FORM & TOMBOL HAPUS
+  function generateRecipientForms(countOverride = null) {
+    const count = countOverride || parseInt(document.getElementById('jumlahTujuan').value);
+    if(countOverride) document.getElementById('jumlahTujuan').value = count;
+    
+    for (let key in tsInstances) { if (key.startsWith('recDivisi_')) { tsInstances[key].destroy(); delete tsInstances[key]; } }
+    const container = document.getElementById('recipientsContainer'); 
+    container.innerHTML = ''; 
+    cardCounterId = 0; //RESET
+    
+    let htmlFrag = '';
+    for(let i=1; i<=count; i++) {
+      cardCounterId++;
+      htmlFrag += createRecipientHTML(cardCounterId);
+    }
+    container.innerHTML = htmlFrag;
+    reindexCardTitles();
+  }
+
+  function createRecipientHTML(i) {
+    return `
+        <div id="cardRec_${i}" class="recipient-card relative bg-white border border-slate-200 rounded-xl shadow-sm pb-4 transition" data-id="${i}">
+          <div class="bg-slate-100 text-slate-700 font-bold px-4 py-2 border-b flex justify-between items-center mb-4">
+             <span class="card-title text-indigo-700">Penerima Ke-${i}</span>
+             <button type="button" onclick="removeRecipientCard(${i})" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-lg transition text-xs flex items-center gap-1 font-bold">
+               <i class="fa-solid fa-trash-can"></i> Hapus
+             </button>
+          </div>
+          <div class="px-6 grid grid-cols-1 md:grid-cols-4 gap-5">
+            <div>
+              <label class="premium-label">Region *</label>
+              <select id="recRegion_${i}" required class="premium-input rec-region" onchange="loadDivisi('recipient', ${i})">
+                <option value="">-- Pilih --</option>
+                <option value="CSO">CSO</option>
+                <option value="BO">BO</option>
+                <option value="DC">DC</option>
+                <option value="STORE">STORE</option>
+                <option value="OTHER">OTHER</option>
+              </select>
+            </div>
+            <div>
+              <label id="lblRecDivisi_${i}" class="premium-label">Divisi *</label>
+              <select id="recDivisi_${i}" required class="premium-input rec-divisi"></select>
+              <input type="text" id="recDivisiOther_${i}" class="hidden premium-input mt-1 rec-divisi-other" placeholder="Manual divisi">
+
+              <p id="infoCharOther_${i}" class="hidden text-[10px] text-slate-400 mt-1">Maksimal 200 karakter</p>
+              <p id="lblRecAlamatDisplay_${i}" class="text-[10px] text-indigo-500 font-semibold mt-1 italic leading-tight"></p>
+            </div>
+            <div>
+              <label id="lblRecName_${i}" class="premium-label">Penerima *</label>
+              <input type="text" id="recName_${i}" required class="premium-input rec-name">
+              <p class="text-[10px] text-slate-400 mt-1">Maksimal 50 karakter</p>
+            </div>
+            <div id="wrapperPhone_${i}" class="hidden">
+              <label id="lblRecPhone_${i}" class="premium-label">No HP Penerima *</label>
+              <input type="text" id="recPhone_${i}" required class="premium-input rec-phone">
+              <p class="text-[10px] text-slate-400 mt-1">Hanya angka</p>
+            </div>
+            <div>
+              <label class="premium-label">Paket *</label>
+              <select id="recJenisPaket_${i}" required class="premium-input rec-paket">
+                <option value="Document">Document</option>
+                <option value="Non Document">Non Document</option>
+              </select>
+            </div>
+            <div>
+              <label id="lblDetailPaket_${i}" class="premium-label">Detail Paket</label>
+              <input type="text" id="recDetailPaket_${i}" class="premium-input rec-detail-paket">
+            </div>
+            <div>
+              <label class="premium-label">Quantity (Qty) *</label>
+              <input type="number" id="recQty_${i}" required min="1" class="premium-input rec-qty">
+            </div>
+            <div>
+              <label class="premium-label text-amber-600">Asuransi? *</label>
+              <select id="recAsuransi_${i}" required class="premium-input border-amber-200 rec-asuransi" onchange="toggleHarga(${i})">
+                <option value="Tidak">Tidak</option>
+                <option value="Ya">Ya, Asuransikan</option>
+              </select>
+              <input type="number" id="recHarga_${i}" placeholder="Nilai (Rp)" class="hidden premium-input mt-2 border-amber-300 bg-amber-50 rec-harga">
+            </div>
+            <div class="col-span-2 bg-slate-50 p-3 rounded-lg border flex flex-col justify-center">
+              <p class="premium-label mb-2">Proteksi Ekstra</p>
+              <div class="flex gap-6">
+                <label class="flex items-center cursor-pointer text-sm font-semibold">
+                <input type="checkbox" id="recKayu_${i}" class="mr-2 w-4 h-4 text-indigo-600 rec-kayu"> Packing Kayu
+                </label>
+                <label class="flex items-center cursor-pointer text-sm font-semibold">
+                <input type="checkbox" id="recBubble_${i}" class="mr-2 w-4 h-4 text-indigo-600 rec-bubble"> Bubble Wrap
+                </label>
+              </div>
+            </div>
+            <div class="col-span-2 md:col-span-4 mt-2 border-t border-slate-100 pt-4">
+              <label class="premium-label !text-indigo-700 !text-sm">
+              <i class="fa-solid fa-truck-fast mr-1"></i> Layanan *
+              </label>
+              <select id="recLayanan_${i}" required class="premium-input md:w-1/3 !border-indigo-300 !bg-indigo-50 !font-bold rec-layanan">
+                <option value="Reguler">Layanan Reguler</option>
+                <option value="Urgent Express">Urgent Express (Prioritas)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      `;
+  }
+
+  function removeRecipientCard(id) {
+    const card = document.getElementById(`cardRec_${id}`);
+    if(card) {
+        if(tsInstances[`recDivisi_${id}`]) { 
+          tsInstances[`recDivisi_${id}`].destroy(); 
+          delete tsInstances[`recDivisi_${id}`]; 
+        }
+        card.remove();
+        reindexCardTitles();
+    }
+  }
+
+  function reindexCardTitles() {
+    const cards = document.querySelectorAll('.recipient-card');
+    if(cards.length === 0) {
+        //PAKSA MINIMAL 1 FORM BUAT DI HAPUS
+        document.getElementById('jumlahTujuan').value = "1";
+        generateRecipientForms(1);
+        return;
+    }
+    document.getElementById('jumlahTujuan').value = cards.length;
+    cards.forEach((card, index) => {
+        const titleSpan = card.querySelector('.card-title');
+        if(titleSpan) titleSpan.innerText = `Penerima Ke-${index + 1}`;
+    });
+  }
+
+  function toggleHarga(index) {
+    const val = document.getElementById(`recAsuransi_${index}`).value;
+    const input = document.getElementById(`recHarga_${index}`);
+    if(val === 'Ya') { 
+      input.classList.remove('hidden'); 
+      input.required = true; 
+    } else { 
+      input.classList.add('hidden'); 
+      input.required = false; input.value = ''; 
+    }
+  }
+
+    function autoFillRecipientAddress(index) {
+    const sel = document.getElementById(`recDivisi_${index}`);
+    const displayAlamat = document.getElementById(`lblRecAlamatDisplay_${index}`);
+    
+    if (!displayAlamat) return;
+
+    // Reset display
+    displayAlamat.innerHTML = '';
+    displayAlamat.className = '';
+
+    if (sel && sel.value) {
+      const recRegion = document.getElementById(`recRegion_${index}`).value;
+      const recDivisi = sel.value;
+      
+      // Cari data lengkap penerima dari master
+      const mData = masterDivisi.find(d => d.divisi === recDivisi && d.region === recRegion);
+      const recAlamat = mData ? (mData.alamat || "").trim() : '';
+      const recKodeArea = mData ? (mData.kodeArea || "").trim() : '';
+
+      // Ambil data pengirim
+      const senderRegion = document.getElementById('senderRegion').value;
+      const senderDivisi = document.getElementById('senderDivisi').value;
+      const senderAlamat = document.getElementById('lblSenderAlamat').innerText.trim();
+      
+      // Untuk kode area pengirim, kita cari dari masterDivisi berdasarkan senderDivisi & Region
+      const sData = masterDivisi.find(d => d.divisi === senderDivisi && d.region === senderRegion);
+      const senderKodeArea = sData ? (sData.kodeArea || "").trim() : '';
+
+      let isSameLocation = false;
+
+      // VALIDASI MULTI-LAYER (Proteksi BO, CSO, & Store)
+      if (recRegion !== 'OTHER') {
+        // 1. Cek Region + Divisi (Standard)
+        if (recRegion === senderRegion && recDivisi === senderDivisi) {
+          isSameLocation = true;
+        }
+        // 2. Cek Alamat (Proteksi Gedung Sama / BO / CSO)
+        else if (recAlamat !== '' && recAlamat !== '-' && recAlamat === senderAlamat) {
+          isSameLocation = true;
+        }
+        // 3. Cek Kode Area (Proteksi Inkonsistensi Nama)
+        else if (recKodeArea !== '' && recKodeArea !== '-' && recKodeArea === senderKodeArea) {
+          isSameLocation = true;
+        }
+      }
+
+      if (isSameLocation) {
+          Swal.fire({
+              icon: 'error',
+              title: 'Lokasi Sama!',
+              text: 'Anda tidak bisa mengirim ke lokasi sendiri (Alamat/Kode Area terdeteksi sama).',
+              confirmButtonColor: '#4f46e5'
+          });
+          
+          // Penting: Hapus value di TomSelect agar user dipaksa pilih yang lain
+          if(tsInstances[sel.id]) {
+              tsInstances[sel.id].clear(silent = true); 
+          }
+          return;
+      }
+
+      // Tampilkan alamat jika valid
+      if (recAlamat && recAlamat !== '-') {
+        displayAlamat.innerHTML = `<i class="fa-solid fa-location-dot mr-1.5"></i> ${recAlamat}`;
+        displayAlamat.className = 'address-display address-fade';
+      }
+    }
+  }
+
+  //UPLOAD EXCEL DENGAN KOREKSI AI (FUZZY LOGIC)
+  async function handleExcelUpload(e) {
+    const file = e.target.files[0]; 
+    if(!file) return; 
+    
+    showLoading(true, "Menganalisa Data Excel...");
+    
+    const reader = new FileReader();
+    reader.onload = async function(evt) {
+      const data = evt.target.result;
+      const workbook = XLSX.read(data, {type: 'binary'});
+      const firstSheet = workbook.SheetNames[0];
+      const excelRows = XLSX.utils.sheet_to_row_object_array(workbook.Sheets[firstSheet]);
+      
+      // if(excelRows.length === 0 || excelRows.length > 100) { 
+      //   showLoading(false); 
+      //   document.getElementById('bulkUpload').value = '';
+      //   return showErrorAlert('Jumlah penerima di Excel kosong atau melebihi batas performa sistem (Max 100 per upload).'); 
+      // }
+
+      let errors = [];
+      let cleanData = [];
+      const validRegions = ['CSO', 'BO', 'DC', 'STORE', 'OTHER'];
+
+      // --- LOGIKA AWAL ANDA (TIDAK DIUBAH) ---
+      excelRows.forEach((row, idx) => {
+          let rowNum = idx + 2; 
+          let rawRegion = (row.Tujuan_Region || "").toString().trim();
+          let rawDivisi = (row.Tujuan_Divisi || row["Tujuan_Divisi/Alamat Lengkap Tujuan untuk Region OTHER"] || "").toString().trim();
+          
+          let bestRegion = findBestMatch(rawRegion, validRegions, 0.6);
+          if(!bestRegion) { errors.push(`<b>Baris ${rowNum}:</b> Region '${rawRegion}' tidak dikenali sistem.`); return; }
+
+          let finalDivisi = rawDivisi;
+          if (bestRegion !== 'OTHER') {
+              let validDivisis = masterDivisi.filter(d => d.region === bestRegion).map(d => d.divisi);
+              let bestDivisi = findBestMatch(rawDivisi, validDivisis, 0.65);
+              if(!bestDivisi) { errors.push(`<b>Baris ${rowNum}:</b> Divisi '${rawDivisi}' pada Region ${bestRegion} tidak ditemukan di database.`); return; }
+              finalDivisi = bestDivisi;
+          }
+
+          cleanData.push({
+              region: bestRegion, 
+              divisi: finalDivisi,
+              name: row.Nama_Penerima || "", 
+              phone: row.No_HP_Penerima ||  "", 
+              paket: row["Jenis_Paket (Document/Non Document)"] || "Document",
+              detailPaket: row.Detail_Paket || "",
+              qty: row.Jumlah_Barang || 1, 
+              asuransi: row["Asuransi(Ya/Tidak)"] || "Tidak",
+              harga: row.Harga_Barang || "", 
+              kayu: row["Packing_Kayu(Ya/Tidak)"] === 'Ya',
+              bubble: row["Packing_Bubble(Ya/Tidak)"] === 'Ya', 
+              layanan: row["Layanan(Reguler/Urgent Express)"] || "Reguler"
+          });
+
+      });
+
+      if(errors.length > 0) {
+          showLoading(false); 
+          document.getElementById('bulkUpload').value = '';
+          return Swal.fire({ 
+            icon: 'error', title: 'Data Excel Ditolak', 
+            html: `<p class="text-sm mb-2 text-slate-600">Sistem membatalkan upload karena menemukan kesalahan penulisan:</p>
+                  <div class="text-left text-xs bg-red-50 p-3 rounded-lg border border-red-200 text-red-700 max-h-40 overflow-y-auto mb-2">${errors.join('<br>')}</div>`
+          });
+      }
+
+      // --- PERBAIKAN STRATEGI PENGISIAN FORM ---
+      
+      // 1. Render UI Form sekaligus
+      generateRecipientForms(cleanData.length);
+
+      // 2. Gunakan Loop Async agar browser tidak crash (Render Process Gone)
+      for (let index = 0; index < cleanData.length; index++) {
+        const data = cleanData[index];
+        const i = index + 1;
+
+        // Isi value dasar
+        document.getElementById(`recRegion_${i}`).value = data.region; 
+        document.getElementById(`recName_${i}`).value = data.name; 
+        document.getElementById(`recPhone_${i}`).value = data.phone; 
+        document.getElementById(`recJenisPaket_${i}`).value = data.paket; 
+        document.getElementById(`recDetailPaket_${i}`).value = data.detailPaket; 
+        document.getElementById(`recQty_${i}`).value = data.qty;
+        document.getElementById(`recLayanan_${i}`).value = data.layanan;
+        document.getElementById(`recKayu_${i}`).checked = data.kayu; 
+        document.getElementById(`recBubble_${i}`).checked = data.bubble; 
+
+        // Jalankan fungsi dependensi (Region ke Divisi)
+        loadDivisi('recipient', i); 
+
+        // Beri nafas sedikit untuk TomSelect/DOM (100ms per baris)
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        if(data.region === 'OTHER') {
+            document.getElementById(`recDivisiOther_${i}`).value = data.divisi; 
+        } else if(tsInstances[`recDivisi_${i}`]) {
+            tsInstances[`recDivisi_${i}`].setValue(data.divisi);
+        }
+
+        // Handle Asuransi
+        if(data.asuransi && data.asuransi.toLowerCase() === 'ya') { 
+          document.getElementById(`recAsuransi_${i}`).value = "Ya"; 
+          toggleHarga(i); 
+          document.getElementById(`recHarga_${i}`).value = data.harga; 
+        }
+        
+        // Jika data sangat banyak, paksa browser untuk render frame tiap 5 baris
+        if(i % 5 === 0) await new Promise(resolve => requestAnimationFrame(resolve));
+      }
+
+      showLoading(false); 
+      document.getElementById('bulkUpload').value = '';
+
+      Swal.fire({ 
+        icon: 'success', 
+        title: 'Upload & Koreksi Berhasil!', 
+        text: 'Formulir telah diisi otomatis dan divalidasi.', 
+        confirmButtonColor: '#10b981', 
+        timer: 3000 
+      });
+
+    }; 
+    reader.readAsBinaryString(file);
+  }
+    
+  function submitFormSimpanDanCetakResi() {
+    const formInput = document.getElementById('pembebanan');
+    
+    if (!formInput) {
+        // Jika elemen 'pembebanan' tidak ada (berarti form sedang ditutup/dihapus)
+        // Maka langsung hentikan fungsi agar tidak error di console
+        console.warn("Aksi dibatalkan: Form input sedang tidak tersedia (Jam Operasional Tutup).");
+        return; 
+    }
+
+    const cards = document.querySelectorAll('.recipient-card');
+    
+    const senderRegion = document.getElementById('senderRegion').value;
+    const senderDivisi = document.getElementById('senderDivisi').value;
+    const senderAlamat = document.getElementById('lblSenderAlamat').innerText.trim();
+    
+    // Cari Kode Area Pengirim
+    const sData = masterDivisi.find(d => d.divisi === senderDivisi && d.region === senderRegion);
+    const senderKodeArea = sData ? (sData.kodeArea || "").trim() : '';
+
+    if (!senderRegion || !senderDivisi || senderAlamat === '-') {
+        return Swal.fire({ icon: 'warning', title: 'Data Pengirim Belum Lengkap', confirmButtonColor: '#4f46e5' });
+    }
+
+    let hasError = false;
+    let errorDetails = [];
+
+    cards.forEach((card) => {
+        const i = card.getAttribute('data-id');
+        const recRegion = document.getElementById(`recRegion_${i}`).value;
+        const recDivisi = recRegion === 'OTHER' ? 
+                          document.getElementById(`recDivisiOther_${i}`).value : 
+                          document.getElementById(`recDivisi_${i}`).value;
+        const inputPhone = document.getElementById(`recPhone_${i}`);
+        
+        // Validasi Karakter untuk Region OTHER
+        if (recRegion === 'OTHER') {
+            // 1. Cek panjang karakter Alamat/Divisi
+            if (recDivisi.length > 200) {
+                hasError = true;
+                errorDetails.push(`Penerima Ke-${i} (Alamat terlalu panjang, max 200 karakter)`);
+            }
+            
+            // 2. Cek No HP wajib angka
+            const phoneRegex = /^[0-9]+$/;
+            if (!phoneRegex.test(inputPhone.value)) {
+                hasError = true;
+                errorDetails.push(`Penerima Ke-${i} (No HP harus berupa angka)`);
+            }
+        }
+        
+        const mData = masterDivisi.find(d => d.divisi === recDivisi && d.region === recRegion);
+        const recAlamat = mData ? (mData.alamat || "").trim() : '';
+        const recKodeArea = mData ? (mData.kodeArea || "").trim() : '';
+
+        let isSame = false;
+        
+        if (recRegion !== 'OTHER') {
+            // Gabungan validasi: Nama Divisi OR Alamat OR Kode Area
+            const sameDivisi = (recRegion === senderRegion && recDivisi === senderDivisi);
+            const sameAlamat = (recAlamat !== '' && recAlamat !== '-' && recAlamat === senderAlamat);
+            const sameKode = (recKodeArea !== '' && recKodeArea !== '-' && recKodeArea === senderKodeArea);
+
+            if (sameDivisi || sameAlamat || sameKode) {
+                isSame = true;
+            }
+        }
+
+        if (isSame) {
+            hasError = true;
+            card.classList.add('border-2', 'border-red-500', 'bg-red-50');
+            errorDetails.push(`Penerima Ke-${i}`);
+        } else {
+            card.classList.remove('border-2', 'border-red-500', 'bg-red-50');
+        }
+    });
+
+    if (hasError) {
+        return Swal.fire({
+            icon: 'error',
+            title: 'Lokasi Sama Terdeteksi',
+            html: `Tujuan <b>${errorDetails.join(', ')}</b> berada di lokasi yang sama dengan Anda (berdasarkan Alamat/Kode Area).`,
+            confirmButtonColor: '#ef4444'
+        });
+    }
+
+    // 4. Jika lolos validasi, persiapkan Payload Data
+    showLoading(true, "Menyimpan Transaksi...");
+
+    const payload = {
+        superindoEmail: currentUser.superindoEmail, 
+        userRole: currentUser.role,
+        empNumber: document.getElementById('empNumber').value, 
+        senderName: document.getElementById('senderName').value,
+        senderEmail: document.getElementById('senderEmail').value, 
+        senderPhone: document.getElementById('senderPhone').value,
+        senderRegion: senderRegion,
+        senderDivisi: senderDivisi,
+        senderCostCenter: document.getElementById('lblSenderCC').innerText, 
+        senderAlamat: senderAlamat,
+        pembebanan: document.getElementById('pembebanan').value, 
+        totalRecipients: cards.length, 
+        rawTime: new Date().toISOString(),
+        recipients: []
+    };
+    
+    cards.forEach((card) => {
+        let i = card.getAttribute('data-id');
+        let region = document.getElementById(`recRegion_${i}`).value;
+        let divisi = region === 'OTHER' ? document.getElementById(`recDivisiOther_${i}`).value : document.getElementById(`recDivisi_${i}`).value;
+        
+        let alamatTujuan = "";
+        let ccTujuan = "";
+        
+        if (region === 'OTHER') {
+            alamatTujuan = divisi; // Manual input alamat di kolom divisi
+            ccTujuan = "-";
+        } else {
+            const mData = masterDivisi.find(d => d.divisi === divisi && d.region === region);
+            if (mData) {
+                alamatTujuan = mData.alamat;
+                ccTujuan = mData.costCenter;
+            }
+        }
+
+        payload.recipients.push({
+            region: region,
+            divisi: divisi,
+            alamatTujuan: alamatTujuan,
+            ccTujuan: ccTujuan,
+            name: document.getElementById(`recName_${i}`).value,
+            phone: document.getElementById(`recPhone_${i}`).value,
+            jenisPaket: document.getElementById(`recJenisPaket_${i}`).value,
+            detailPaket: document.getElementById(`recDetailPaket_${i}`).value,
+            qty: document.getElementById(`recQty_${i}`).value,
+            asuransi: document.getElementById(`recAsuransi_${i}`).value,
+            hargaBarang: document.getElementById(`recHarga_${i}`).value || 0,
+            packingKayu: document.getElementById(`recKayu_${i}`).checked ? 'Ya' : 'Tidak',
+            packingBubble: document.getElementById(`recBubble_${i}`).checked ? 'Ya' : 'Tidak',
+            layanan: document.getElementById(`recLayanan_${i}`).value
+        });
+    });
+
+    // 5. Kirim ke Server (Google Apps Script)
+    google.script.run
+        .withFailureHandler(err => { 
+            showLoading(false); 
+            showErrorAlert("Gagal menyimpan data: " + err.message); 
+        })
+        .withSuccessHandler(res => { 
+            showLoading(true, "Membuka Jendela Cetak..."); 
+            generateNativePrint(payload); 
+        })
+        .saveData(payload);
+  }
+
+  //ALGORITMA FUZZY LOGIC (KOREKSI OTOMATIS)
+  function levenshtein(s1, s2) {
+    s1 = s1.toLowerCase(); 
+    s2 = s2.toLowerCase();
+
+    let costs = [];
+
+    for (let i = 0; i <= s1.length; i++) {
+      let lastValue = i;
+      for (let j = 0; j <= s2.length; j++) {
+        if (i == 0) costs[j] = j;
+        else {
+          if (j > 0) {
+            let newValue = costs[j - 1];
+
+            if (s1.charAt(i - 1) != s2.charAt(j - 1)) newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+
+            costs[j - 1] = lastValue; lastValue = newValue;
+          }
+        }
+      }
+      if (i > 0) costs[s2.length] = lastValue;
+    }
+    return costs[s2.length];
+  }
+    
+  function getSimilarity(s1, s2) {
+    let longer = s1; 
+    let shorter = s2;
+    if (s1.length < s2.length) { 
+      longer = s2; shorter = s1; 
+    }
+
+    let longerLength = longer.length;
+
+    if (longerLength == 0) return 1.0;
+    return (longerLength - levenshtein(longer, shorter)) / parseFloat(longerLength);
+  }
+
+  function findBestMatch(input, optionsArray, threshold = 0.65) {
+    if(!input) return null;
+    let bestMatch = null;
+    let highestSimilarity = 0;
+    for(let option of optionsArray) {
+        if(option.toLowerCase() === input.toLowerCase()) return option; //PERFECT MATCH
+
+        let sim = getSimilarity(input, option);
+
+        if(sim > highestSimilarity) { 
+          highestSimilarity = sim; 
+          bestMatch = option; 
+        }
+    }
+    return highestSimilarity >= threshold ? bestMatch : null;
+  }
+
+  function generateNativePrint(payload) {
+    const tempDiv = document.createElement('div'); 
+
+    tempDiv.style.position = 'absolute'; 
+    tempDiv.style.left = '-9999px'; 
+    tempDiv.style.visibility = 'hidden'; 
+    document.body.appendChild(tempDiv);
+
+    const logoSrc = document.getElementById('mainLogo').src; 
+    let html = ''; 
+
+    const waktuCetak = payload.rawDate ? 
+        new Date(payload.rawDate).toLocaleString('id-ID', { 
+            day: '2-digit', 
+            month: 'short', 
+            year: 'numeric', 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        }) : 
+        new Date().toLocaleString('id-ID', { 
+            day: '2-digit', 
+            month: 'short', 
+            year: 'numeric', 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
+
+    payload.recipients.forEach((rec, index) => {
+      let recAlamat = "-";
+
+      if (rec.region !== 'OTHER') { 
+        const mData = masterDivisi.find(d => d.divisi === rec.divisi && d.region === rec.region); 
+        if (mData) recAlamat = mData.alamat; 
+      }
+
+      let proteksi = []; 
+      if(rec.packingKayu === 'Ya') proteksi.push("Kayu"); 
+      if(rec.packingBubble === 'Ya') proteksi.push("Bubble"); 
+
+      let teksProteksi = proteksi.length > 0 ? proteksi.join(" + ") : "Tidak";
+
+      let randomKode = (payload.rawDate ? new Date(payload.rawDate) : new Date()).getTime().toString().slice(-6); 
+
+      let urutan = (index+1).toString().padStart(3, '0'); 
+      let nomorResi = `EXP-${randomKode}-${urutan}`; 
+      let bgColor = rec.layanan === 'Urgent Express' ? '#000000' : '#475569';
+      let asuransiText = ''; 
+
+      if (rec.asuransi === 'Ya') { 
+        let nilaiRupiah = 
+          new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })
+          .format(rec.hargaBarang || 0); 
+
+        asuransiText = ` | ASURANSI: ${nilaiRupiah}`; 
+      }
+    
+      let namaPenerimaCetak = rec.name; 
+      let alamatPenerimaCetak = rec.region === 'OTHER' ? rec.divisi : recAlamat;
+      let tujuanCetak = rec.region === 'OTHER' ? 'OTHER (EXT)' : rec.region + ' - ' + rec.divisi;
+
+      // --- LOGIKA DINAMIS NOMOR HP ---
+      let displayHpPengirim = "";
+      let displayHpPenerima = "";
+
+      if (rec.region === 'OTHER') {
+          // Fungsi pembantu untuk sensor nomor (4 digit awal **** 3 digit akhir)
+          const maskPhone = (phone) => {
+              let p = (phone || "").toString();
+              if (p.length > 7) {
+                  return p.slice(0, 4) + "****" + p.slice(-3);
+              }
+              return "****"; // Jaga-jaga kalau input nomor terlalu pendek
+          };
+
+          // 1. HP Penerima (Tampil dengan sensor slice)
+          // let censoredHpRec = maskPhone(rec.phone);
+          let censoredHpRec = rec.phone; //penerima tidak disensor
+          displayHpPenerima = `<span style="font-size: 11px; font-weight: normal; display: block; margin-top: 2px;">HP: ${censoredHpRec}</span>`;
+          
+          // 2. HP Pengirim (Tampil di bawah nama dengan sensor slice)
+          let censoredHpSender = maskPhone(payload.senderPhone);
+          displayHpPengirim = `<div style="font-size: 10px; font-weight: normal; margin-top: 2px; color: #444;">HP: ${censoredHpSender}</div>`;
+      }
+      
+      // Jika != OTHER, displayHpPengirim dan displayHpPenerima tetap kosong ""
+      // -------------------------------
+
+      html += `
+        <div class="label-page">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 8px;">
+              ${logoSrc && !logoSrc.endsWith('""') 
+                ? `<img src="${logoSrc}" style="max-height: 25px; max-width: 50%;">` 
+                  : `<h2 style="margin:0; font-size: 18px; font-weight: 900; font-style: italic;">EXPRESS</h2>`
+              }
+
+              <div style="text-align: right;">
+                <div style="font-size: 10px; font-weight: 900; letter-spacing: 1px;">
+                  MAILING SERVICES
+                </div>
+              <div style="font-size: 8px; color: #333;">${waktuCetak}</div></div>
+          </div>
+
+          <div style="width: 100%; display: flex; justify-content: center; margin-bottom: 8px; overflow: hidden;">
+            <svg class="barcode" 
+                  jsbarcode-value="${nomorResi}" 
+                  jsbarcode-height="38" 
+                  jsbarcode-width="2" 
+                  jsbarcode-fontsize="12" 
+                  jsbarcode-margin="0" 
+                  style="max-width: 100%; height: auto">
+            </svg>
+          </div>
+
+          <div style="background-color: ${bgColor}; color: #ffffff; text-align: center; font-weight: 900; padding: 6px; font-size: 12px; text-transform: uppercase; margin-bottom: 8px; border-radius: 4px; letter-spacing: 1px; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+            ${rec.layanan}${asuransiText}
+          </div>
+
+          <div style="border: 2px solid #000; border-radius: 6px; padding: 8px; margin-bottom: 8px; background-color: #f8fafc; -webkit-print-color-adjust: exact;">
+            <div style="font-size: 9px; color: #000; font-weight: bold; margin-bottom: 3px;">
+              PENERIMA:
+            </div>
+            <div style="font-size: 16px; font-weight: 900; line-height: 1.1; text-transform: uppercase; word-break: break-word; overflow-wrap: break-word;">
+              ${namaPenerimaCetak}
+              ${displayHpPenerima}
+            </div>
+            <div style="font-size: 12px; font-weight: bold; margin-top: 6px; color: #1e293b; word-break: break-word;">
+              TUJUAN: ${tujuanCetak}
+            </div>
+            <div style="font-size: 10px; margin-top: 3px; line-height: 1.3; color: #334155; word-break: break-word; overflow-wrap: break-word;">
+              ${alamatPenerimaCetak}
+            </div>
+          </div>
+
+          <!-- --- BAGIAN PENGIRIM --- -->
+          <div style="border: 1px solid #000; border-radius: 6px; padding: 6px; margin-bottom: 8px;">
+              <div style="font-size: 8px; color: #000; font-weight: bold; margin-bottom: 2px;">
+                PENGIRIM:
+              </div>
+              <div style="font-size: 12px; font-weight: bold; word-break: break-word;">
+                ${payload.senderName} 
+              </div>
+              ${displayHpPengirim}
+              <div style="font-size: 10px; margin-top: 2px; word-break: break-word;">
+                ${payload.senderDivisi}
+              </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; border-top: 2px dashed #000; border-bottom: 2px dashed #000; padding: 6px 0; margin-bottom: 10px;">
+            <div style="width: 60%; font-size: 10px; line-height: 1.4;">
+              <div>
+                <strong>Isi:</strong> ${rec.jenisPaket}
+              </div>
+              <div>
+                <strong>Jumlah:</strong> ${rec.qty} Paket
+              </div>
+            </div>
+
+            <div style="width: 40%; font-size: 10px; line-height: 1.5; text-align: right;">
+              <div>
+                <strong>Packing:</strong> ${teksProteksi}
+              </div>
+              <div>
+                <strong>Pembebanan:</strong> ${payload.pembebanan}
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; margin-top: 8px;">
+            <div style="width: 40%; text-align: center;">
+              <div style="font-size: 9px; font-weight: bold; margin-bottom: 30px;">
+                Pengirim
+              </div>
+              <div style="font-size: 10px; border-bottom: 1px solid #000; padding-bottom: 2px;">
+                ${payload.senderName}
+              </div>
+            </div>
+            <div style="width: 40%; text-align: center;">
+              <div style="font-size: 9px; font-weight: bold; margin-bottom: 30px;">
+                Penerima
+              </div>
+              <div style="font-size: 10px; border-bottom: 1px solid #000; padding-bottom: 2px;">( ...................................... )
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+      
+    tempDiv.innerHTML = html;
+    try { 
+      JsBarcode(".barcode").init(); 
+    } catch(e) {
+      console.log(e);
+    }
+
+    const renderedHTML = tempDiv.innerHTML; 
+    document.body.removeChild(tempDiv);
+
+    let iframe = document.getElementById('printFrame');
+    if (!iframe) { 
+      iframe = document.createElement('iframe'); 
+      iframe.id = 'printFrame'; 
+      iframe.style.position = 'fixed'; 
+      iframe.style.right = '0'; 
+      iframe.style.bottom = '0'; 
+      iframe.style.width = '0'; 
+      iframe.style.height = '0'; 
+      iframe.style.border = '0'; 
+      document.body.appendChild(iframe); 
+    }
+
+    let iframeDoc = iframe.contentWindow.document; 
+    iframeDoc.open();
+    iframeDoc.write(`
+      <!DOCTYPE html><html>
+        <head>
+          <title>Label Pengiriman - ${payload.empNumber}</title>
+          <style>
+           @page { 
+              size: A4 portrait; 
+              margin: 0;
+              margin-bottom: 3px;
+            } 
+
+            body { 
+              font-family: Arial, sans-serif; 
+              
+              margin: 0; 
+              padding: 0; 
+              
+              background: #fff; 
+              -webkit-print-color-adjust: exact !important; 
+              print-color-adjust: exact !important; 
+              
+              display: flex; 
+              flex-wrap: wrap; 
+              align-content: flex-start; 
+            } 
+            * { 
+              box-sizing: border-box; 
+            } 
+            
+
+            .label-page { 
+              /* A4 paper measures 210 x 297 mm */
+              width: 94mm;    /* 2 cols -> 188 mm + label-page margin (5mm*2 * 2cols = 10) = 208 mm */
+              height: 140mm;  /* 2 rows -> 280 mm + label-page margin ((4mm*2) * 2cols = 16) = 296 mm */
+              padding: 10mm 5mm 1mm 5mm; 
+              margin: 4mm 5mm;
+
+              box-sizing: border-box;
+              border: 1px dashed #64748b;
+              
+              page-break-inside: avoid; /* Mencegah barcode/konten terpotong di tengah */
+              page-break-after: auto; /* Gunakan 'always' jika ingin 1 label per lembar,  atau 'auto' jika ingin 2-4 label per lembar */
+            }
+          </style>
+        </head>
+        <body>${renderedHTML}</body>
+      </html>
+    `);
+
+    iframeDoc.close();
+
+    setTimeout(() => {
+      showLoading(false);
+      Swal.fire({ 
+        title: 'Cetak Berhasil!', 
+        text: 'Data tersimpan dan Resi siap untuk dipotong.', 
+        icon: 'success', 
+        confirmButtonColor: '#4f46e5', 
+        timer: 3500, 
+        timerProgressBar: true 
+      });
+
+      iframe.contentWindow.focus(); 
+      iframe.contentWindow.print();
+
+      document.getElementById('shippingForm').reset(); 
+      document.getElementById('lblSenderCC').innerText = '-'; 
+      document.getElementById('lblSenderAlamat').innerText = '-';
+      
+      for (let key in tsInstances) tsInstances[key].clear(true); generateRecipientForms(1);
+    }, 500);
+  }
+
+</script>
