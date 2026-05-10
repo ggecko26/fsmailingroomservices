@@ -1,0 +1,818 @@
+<script>
+    // <!-- VIEW DASHBOARD SECTION -->
+  function loadViewDashboardData() {
+    const tableId = '#mainTableViewDashboard';
+    const tBody = document.getElementById('viewDashboardTable');
+    const startInput = document.getElementById('filterStartDate');
+    const endInput = document.getElementById('filterEndDate');
+
+    // Inisialisasi tanggal otomatis jika input masih kosong
+    if (!startInput.value || !endInput.value) {
+      const now = new Date();
+      const offset = now.getTimezoneOffset() * 60000;
+      const localISODate = new Date(now - offset).toISOString().split('T')[0];
+      
+      startInput.value = localISODate;
+      endInput.value = localISODate;
+      endInput.min = localISODate;
+    }
+
+    const start = startInput.value;
+    const end = endInput.value;
+    // const canDelete = (currentUser.role === 'Admin' || currentUser.role === 'Owner');
+    // --- LOGIKA BARU UNTUK AUTHORIZATION ---
+    const isAdminOrOwner = (currentUser.role === 'Admin' || currentUser.role === 'Owner');
+    const isOperationalHour = (currentUser.serverHour >= 8 && currentUser.serverHour < 15);
+  
+    // Dapatkan tanggal hari ini dalam format YYYY-MM-DD untuk perbandingan
+    const todayDate = new Date().toISOString().split('T')[0];
+
+    showSection('viewDashboardSection');
+
+    if ($.fn.DataTable.isDataTable(tableId)) {
+        $(tableId).DataTable().clear().destroy();
+    }
+
+    tBody.innerHTML = '<tr><td colspan="7" class="p-10 text-center text-indigo-500 font-bold"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Mengambil data...</td></tr>';
+
+    google.script.run
+      .withFailureHandler(err => {
+        tBody.innerHTML = 
+            `<tr><td colspan="7" class="p-5 text-center text-red-500">Gagal memuat data: ${err.message}</td></tr>`;
+      })
+      .withSuccessHandler(function(response) {
+        let html = '';
+
+          if (response && response.list && response.list.length > 0) {
+            response.list.forEach(i => {
+              const rawDate = new Date(i.rawTime);
+
+              const formattedDate = rawDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }); // Format Tanggal: 25 Apr 2026
+                
+              // Format Waktu AM/PM: 09:15 AM
+              const formattedTime = rawDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+              
+              const transactionDate = rawDate.getFullYear() + '-' + 
+                        String(rawDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                        String(rawDate.getDate()).padStart(2, '0');
+                        
+              // const formattedDate = rawDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+              // const formattedTime = rawDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+              // --- LOGIKA DINAMIS TOMBOL HAPUS ---
+              // Staff bisa hapus jika: Hari ini DAN Jam Operasional
+              const staffCanDelete = (currentUser.role === 'Staff' && transactionDate >= todayDate && isOperationalHour);
+              const canDeleteThisRow = isAdminOrOwner || staffCanDelete;
+
+              // --- LOGIKA BADGE LAYANAN & PROTEKSI MINIMALIS ---
+              // 1. Siapkan teks harga barang jika asuransi aktif
+              const displayHarga = i.asuransi === 'Ya' 
+                    ? `Nilai: Rp${Number(i.nilaiBarang).toLocaleString('id-ID')}` 
+                    : 'Tanpa Asuransi';
+
+              // 2. Siapkan detail proteksi ekstra
+              let listProteksi = [];
+
+              if (i.packingKayu === 'Ya') listProteksi.push("Packing Kayu");
+              if (i.packingBubble === 'Ya') listProteksi.push("Bubble Wrap");
+              
+              const teksProteksi = listProteksi.length > 0 ? listProteksi.join(" & ") : "Standar Packing";
+
+              // 3. Tentukan warna badge utama
+              const badgeStyle = i.layanan === 'Urgent Express' 
+                  ? 'bg-rose-50 text-rose-600 border-rose-100' 
+                  : 'bg-emerald-50 text-emerald-600 border-emerald-100';
+              
+              // --- CARI ALAMAT PENGIRIM ---
+              // const detailPengirim = masterDivisi.find(d => 
+              //     d.divisi === i.senderDivisi && d.region === i.senderRegion
+              // ); // dari DB master divisi
+              // const alamatPengirim = detailPengirim ? detailPengirim.alamat : (i.senderAlamat || "Alamat tidak terdaftar di master data");
+
+              const alamatPengirim = i.senderAlamat || "Alamat tidak ditemukan"; // dari DB transaksi
+
+              // --- CARI ALAMAT PENERIMA ---
+              let alamatTujuan = "Alamat tidak ditemukan";
+              if (i.tujuanRegion === 'OTHER') {
+                  alamatTujuan = i.tujuanDivisi; // Untuk OTHER, alamat biasanya diinput manual di kolom divisi
+              } else {
+                  // const detailTujuan = masterDivisi.find(d => 
+                  //     d.divisi === i.tujuanDivisi && d.region === i.tujuanRegion
+                  // ); // dari DB master divisi
+                  // alamatTujuan = detailTujuan ? detailTujuan.alamat : (i.alamatTujuanDivisi || "Alamat tidak ditemukan");
+                
+                  alamatTujuan = i.alamatTujuanDivisi || "Alamat tidak ditemukan"; // dari DB transaksi
+              }
+
+              // Ambil CC sesuai tipe pembebanan
+              let displayCC = "-";
+              if (i.pembebanan === 'Pengirim') {
+                  displayCC = i.senderCostCenter || "-";
+              } else {
+                  // Cari CC Penerima dari master data jika tidak ada di database transaksi
+                  // const detailTujuan = masterDivisi.find(d => d.divisi === i.tujuanDivisi && d.region === i.tujuanRegion); // dari DB master divisi
+                  // displayCC = detailTujuan ? detailTujuan.costCenter : (i.costCenterTujuanDivisi || "-");
+                
+                  displayCC = i.costCenterTujuanDivisi || "-"; // dari DB transaksi
+              }
+
+              html += `
+              <tr class="hover:bg-indigo-50/30 transition border-b border-slate-100">
+                <td class="p-3" data-order="${i.rawTime || ''}">
+                  <span class="text-sm font-bold text-slate-800">${formattedDate}</span>
+                  <div class="text-[10px] text-slate-500 font-black">
+                    <i class="fa-regular fa-clock mr-1 text-indigo-500"></i>${formattedTime}
+                  </div>
+                </td>
+        
+                <td class="p-3">
+                  <div class="flex flex-col">
+                    <span class="text-xs font-black text-slate-800 uppercase line-clamp-1">${i.senderName}</span>
+
+                    <div class="group relative cursor-help w-fit">
+                      <span class="text-[10px] text-slate-500 font-medium border-b border-dotted border-slate-300">
+                        ${i.senderDivisi}
+                      </span>
+                      <div 
+                          class="absolute left-0 -top-12 hidden group-hover:block bg-slate-800 text-white text-[10px] py-2 px-3 rounded shadow-lg z-50 whitespace-nowrap">
+                        <div class="flex flex-col gap-1">
+                          <div class="flex items-center gap-1.5">
+                            <i class="fa-solid fa-location-dot text-rose-400"></i>
+                              ${i.senderRegion} - ${alamatPengirim}
+                          </div>
+                          <div class="flex items-center gap-1.5 font-bold text-amber-400">
+                            <i class="fa-solid fa-wallet"></i> Cost Center: ${i.senderCostCenter || '-'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+        
+                    <div class="group relative flex items-center gap-1.5 mt-1 cursor-help w-fit">
+                      <i class="fa-solid fa-circle-check text-[9px] text-emerald-500"></i>
+                      <span class="text-[10px] text-slate-400 font-bold">
+                        ${i.emailSuperIndo || i.emailSuperindo || '-'}
+                      </span>
+                      <div 
+                          class="absolute left-0 -top-8 hidden group-hover:block bg-slate-800 text-white text-[10px] py-1 px-2 rounded shadow-lg z-50 whitespace-nowrap">
+                        Email akun Super Indo yang login saat input pengiriman
+                      </div>
+                    </div>
+                  </div>
+                </td>
+        
+                <td class="p-3">
+                  <div class="flex flex-col gap-1">
+                    <div class="flex items-center gap-2">
+                      <div class="w-6 h-6 rounded bg-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm">
+                          <i class="fa-solid fa-map-location-dot text-[10px]"></i>
+                      </div>
+                      <div class="flex flex-col">
+                        <span class="text-xs font-black text-slate-800 uppercase line-clamp-1">${i.recipientName}</span>
+                        
+                        <div class="group relative cursor-help w-fit">
+                            <span 
+                                  class="text-[10px] font-bold text-indigo-600 border-b border-dotted border-indigo-300 truncate block max-w-[180px]">
+                                ${i.tujuanDivisi}
+                            </span>
+                            <div 
+                                class="absolute left-0 -top-12 hidden group-hover:block bg-slate-800 text-white text-[10px] py-2 px-3 rounded shadow-lg z-50 whitespace-nowrap">
+                              <div class="flex flex-col gap-1">
+                                <div class="flex items-center gap-1.5">
+                                  <i class="fa-solid fa-truck-ramp-box text-indigo-400"></i> 
+                                  ${i.tujuanRegion} - ${alamatTujuan}
+                                </div>
+                                <div class="flex items-center gap-1.5 font-bold text-amber-400">
+                                  <i class="fa-solid        fa-wallet"></i> 
+                                  Cost Center: ${i.costCenterTujuanDivisi ? i.costCenterTujuanDivisi : "-"}
+                                </div>
+                              </div>
+                            </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+        
+                <td class="p-3">
+                  <div class="group relative cursor-help w-fit">
+                      <span 
+                          class="px-2 py-0.5 rounded text-[10px] font-black border border-amber-200 bg-amber-50 text-amber-700 uppercase tracking-tighter flex items-center gap-1">
+                            <i class="fa-solid fa-file-invoice-dollar text-[10px]"></i>
+                            ${i.pembebanan}
+                      </span>
+                      <div 
+                          class="absolute left-0 -top-8 hidden group-hover:block bg-slate-800 text-white text-[10px] py-1 px-2 rounded shadow-lg z-50 whitespace-nowrap">
+                            <i class="fa-solid fa-landmark text-amber-400 mr-1"></i> 
+                            CC: ${displayCC}
+                      </div>
+                  </div>
+                </td>
+        
+                <td class="p-3">
+                  <div class="flex items-center gap-1">
+                    <div class="group relative cursor-help w-fit">
+                      <span 
+                            class="px-2 py-0.5 rounded text-[9px] font-black border uppercase tracking-tighter flex         items-center gap-1 ${badgeStyle}">
+                              <i class="${i.layanan === 'Urgent Express' ? 'fa-solid fa-bolt-lightning' : 'fa-solid fa-truck'} text-[10px]"></i>
+                              ${i.layanan || 'Reguler'}
+                              ${i.asuransi === 'Ya' ? '<i class="fa-solid fa-shield-check text-[10px]"></i>' : ''}
+                      </span>
+        
+                      <div 
+                          class="absolute left-0 -top-12 hidden group-hover:block bg-slate-800 text-white text-[10px] py-2 px-3 rounded shadow-lg z-50 whitespace-nowrap leading-relaxed">
+                        <div class="flex items-center gap-2 mb-1 border-b border-slate-600 pb-1">
+                          <i class="fa-solid fa-box-open text-indigo-400"></i> 
+                          <span class="font-bold uppercase">${teksProteksi}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <i class="fa-solid fa-money-bill-wave text-emerald-400"></i> 
+                          <span>Asuransi: ${displayHarga}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+        
+                <td class="p-3 text-center">
+                  <div class="group relative inline-flex flex-col items-center cursor-help">
+                    <span class="text-lg font-black text-slate-800 leading-none">${i.jumlahBarang}</span>
+                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Paket</span>
+                    
+                    <div 
+                      class="absolute bottom-full mb-2 hidden group-hover:block bg-slate-800 text-white text-[10px] py-2 px-3 rounded-lg shadow-xl z-50 whitespace-nowrap min-w-[120px] text-left">
+                      <div class="flex flex-col gap-1">
+                        <div class="flex items-center gap-1.5 border-b border-slate-600 pb-1 mb-1">
+                          <i class="fa-solid fa-box text-indigo-400"></i>
+                          <span class="font-bold uppercase">${i.jenisBarang || 'Paket'}</span>
+                        </div>
+                        <div class="flex items-start gap-1.5 italic text-slate-300">
+                          <i class="fa-solid fa-info-circle mt-0.5"></i>
+                          <span class="whitespace-normal leading-tight">
+                            ${i.detailBarang || 'Tidak ada detail isi'}
+                          </span>
+                        </div>
+                      </div>
+                      <div class="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent         border-t-slate-800">
+                      </div>
+                    </div>
+                  </div>
+                </td>
+        
+                <td class="p-3 text-center">
+                    <div class="flex items-center justify-center gap-2">
+                        <button onclick="viewDetail('${i.transactionId}')" class="w-8 h-8 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-800 hover:text-white transition shadow-sm flex items-center justify-center" title="Detail">
+                            <i class="fa-solid fa-magnifying-glass text-xs"></i>
+                        </button>
+                        <button onclick="directPrint('${i.transactionId}')" class="w-8 h-8 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition shadow-sm flex items-center justify-center" title="Cetak Resi">
+                            <i class="fa-solid fa-print text-xs"></i>
+                        </button>
+                        ${canDeleteThisRow ? `
+                            <button onclick="openEditModal('${i.transactionDetailId}')" class="w-8 h-8 rounded-lg bg-white border border-amber-200 text-amber-500 hover:bg-amber-500 hover:text-white transition shadow-sm flex items-center justify-center" title="Edit">
+                                <i class="fa-solid fa-pen text-xs"></i>
+                            </button>
+                            <button onclick="deleteTransactionPrompt('${i.transactionDetailId}')" class="w-8 h-8 rounded-lg bg-white border border-rose-200 text-rose-500 hover:bg-rose-500 hover:text-white transition shadow-sm flex items-center justify-center" title="Hapus">
+                                <i class="fa-solid fa-trash-can text-xs"></i>
+                            </button>
+                        ` : `
+                            <div class="w-8 h-8 flex items-center justify-center text-slate-300" title="Edit/Hapus dinonaktifkan (Lewat jam operasional / bukan hari ini)">
+                                <i class="fa-solid fa-lock text-[10px]"></i>
+                            </div>
+                        `}
+                    </div>
+                </td>
+              </tr>`;
+            });
+              
+              tBody.innerHTML = html;
+
+              $(tableId).DataTable({
+                  "order": [[0, "desc"]],
+                  "pageLength": 10,
+                  "language": {
+                      "search": "Cari Data:",
+                      "lengthMenu": "_MENU_",
+                      "info": "Data _START_ - _END_ dari _TOTAL_",
+                      "paginate": { "previous": "<", "next": ">" }
+                  },
+                  "retrieve": true,
+                  "responsive": true
+              });
+          } else {
+              tBody.innerHTML = '<tr><td colspan="7" class="p-10 text-center text-slate-400 font-medium">Data tidak ditemukan.</td></tr>';
+          }
+      })
+      .getDashboardData(start, end, currentUser);
+  }
+
+  // Tambahkan fungsi pembantu untuk Print Langsung
+  function directPrint(transactionId) {
+      showLoading(true, "Mempersiapkan rujukan cetak...");
+      google.script.run
+        .withFailureHandler(err => {
+          showLoading(false);
+          showErrorAlert("Gagal cetak: " + err.message);
+        })
+        .withSuccessHandler(payload => {
+          showLoading(false);
+          if (payload) {
+            generateNativePrint(payload);
+          } else {
+            showErrorAlert("Data tidak ditemukan.");
+          }
+        })
+        .getDetailTransaksi(transactionId);
+  }
+
+  function setMinEndDate() {
+    const startVal = document.getElementById('filterStartDate').value;
+    const endInput = document.getElementById('filterEndDate');
+    //SET MINIMAL TANGGAL SELESAI ADALAH TANGGAL MULAI YG DIPILIH SET
+    endInput.min = startVal; 
+    if (endInput.value < startVal) {
+      endInput.value = startVal;
+    }
+  }
+
+  function exportDashboardToExcel() {
+    const start = document.getElementById('filterStartDate').value;
+    const end = document.getElementById('filterEndDate').value;
+
+    if (!start || !end) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Pilih Tanggal',
+        text: 'Silakan tentukan rentang tanggal terlebih dahulu.'
+      });
+      return;
+    }
+
+    showLoading(true, `Mengekspor data periode ${start} s/d ${end}...`);
+
+    // PERBAIKAN: Kirim start, end, DAN currentUser agar server bisa memfilter sesuai email
+    google.script.run
+      .withFailureHandler(err => {
+        showLoading(false);
+        showErrorAlert("Gagal export: " + err.message);
+      })
+      .withSuccessHandler(dataArray => {
+        showLoading(false);
+        
+        if (!dataArray || dataArray.length <= 1) {
+          return Swal.fire("Info", "Tidak ada data ditemukan pada rentang tanggal tersebut.", "info");
+        }
+
+        const ws = XLSX.utils.aoa_to_sheet(dataArray);
+        const wscols = dataArray[0].map(() => ({ wch: 20 }));
+        ws['!cols'] = wscols;
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Filtered_Report");
+
+        XLSX.writeFile(wb, `Mailing_Report_${start}_to_${end}.xlsx`);
+
+        Swal.fire({
+          icon: 'success',
+          title: 'Berhasil',
+          text: 'Laporan berhasil diunduh.',
+          timer: 2000,
+          showConfirmButton: false
+        });
+      })
+      .getExportDataByRange(start, end, currentUser); // Tambahkan currentUser di sini
+  }
+  
+  function deleteTransactionPrompt(transactionDetailId) {
+    Swal.fire({
+        title: 'Hapus Transaksi?',
+        text: "Data pengiriman ini akan dihapus permanen dari sistem.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: 'Ya, Hapus!',
+        cancelButtonText: 'Batal',
+        reverseButtons: true
+    }).then((result) => {
+        if (result.isConfirmed) {
+            showLoading(true, "Menghapus transaksi...");
+            google.script.run
+                .withFailureHandler(err => {
+                    showLoading(false);
+                    showErrorAlert("Gagal menghapus: " + err.message);
+                })
+                .withSuccessHandler(() => {
+                    showLoading(false);
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Berhasil',
+                        text: 'Transaksi telah dihapus.',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                    loadViewDashboardData(); // Refresh tabel setelah hapus
+                })
+                .deleteTransaction(currentUser.role, transactionDetailId); // Memanggil fungsi server
+        }
+    });
+  }
+
+  function viewDetail(transactionId) {
+    showLoading(true, "Mengambil data transaksi...");
+
+    google.script.run
+      .withFailureHandler(err => {
+        showLoading(false);
+        showErrorAlert("Gagal memuat detail: " + err.message);
+      })
+      .withSuccessHandler(payload => {
+        showLoading(false);
+        if (payload) {
+          currentActivePayload = payload; // Simpan ke global variable
+          renderDetailToModal(payload);
+          openDetailModal();
+        } else {
+          showErrorAlert("Data tidak ditemukan.");
+        }
+      })
+      .getDetailTransaksi(transactionId);
+  }
+
+  function renderDetailToModal(payload) {
+    const header = document.getElementById('detailHeader');
+    const waktuTransaksi = payload.timeDisplay || new Date().toLocaleString('id-ID');
+
+    // GRID HEADER: Penambahan detail Nomor HP Pengirim
+    header.innerHTML = `
+      <div class="flex flex-col justify-center space-y-2">
+        <div>
+          <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Waktu Transaksi</p>
+          <p class="text-sm font-bold text-slate-700 flex items-center gap-1.5">
+            <i class="fa-regular fa-calendar-check text-indigo-500 text-xs"></i> ${waktuTransaksi}
+          </p>
+        </div>
+        <div>
+          <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Pembebanan</p>
+          <span class="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded font-black border border-amber-200 shadow-sm uppercase">
+            ${payload.pembebanan}
+          </span>
+        </div>
+      </div>
+      
+      <div class="border-l border-slate-200 pl-4">
+        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Data Pengirim</p>
+        <p class="text-sm font-extrabold text-slate-800 uppercase tracking-tight">${payload.senderName}</p>
+        <p class="text-[11px] text-slate-500 font-semibold mt-0.5 italic line-clamp-1">${payload.senderEmail || '-'}</p>
+        <p class="text-[11px] text-indigo-600 font-bold mt-0.5"><i class="fa-solid fa-phone-volume mr-1 text-[9px]"></i> ${payload.senderPhone || '-'}</p>
+        <div class="flex items-center gap-2 mt-2">
+          <span class="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded font-bold text-slate-600 uppercase">NIK: ${payload.empNumber}</span>
+          <span class="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded font-bold text-slate-600 uppercase">CC: ${payload.senderCostCenter}</span>
+        </div>
+      </div>
+
+      <div class="border-l border-slate-200 pl-4 col-span-1 md:col-span-2">
+        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Unit Kerja & Lokasi</p>
+        <div class="flex items-start gap-2">
+          <i class="fa-solid fa-location-dot text-rose-500 mt-1 text-xs"></i>
+          <div>
+            <p class="text-xs font-bold text-slate-700">${payload.senderRegion} — ${payload.senderDivisi}</p>
+            <p class="text-[11px] text-slate-500 leading-relaxed mt-1 italic pr-2">
+              "${payload.senderAlamat || 'Alamat tidak terdefinisi'}"
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const tbody = document.getElementById('detailTableBody');
+    
+    tbody.innerHTML = payload.recipients.map((rec, index) => {
+      let protectionTags = [];
+      if (rec.packingKayu === 'Ya') {
+          protectionTags.push('<span class="bg-slate-800 text-white px-2 py-0.5 rounded text-[8px] font-bold">KAYU</span>');
+      }
+      if (rec.packingBubble === 'Ya') {
+          protectionTags.push('<span class="bg-indigo-600 text-white px-2 py-0.5 rounded text-[8px] font-bold">BUBBLE</span>');
+      }
+      
+      let insuranceInfo = '';
+      if (rec.asuransi === 'Ya') {
+          insuranceInfo = `
+            <div class="flex items-center gap-1 mt-1 text-emerald-600 font-bold text-[10px]">
+              <i class="fa-solid fa-shield-check text-[9px]"></i>
+              Rp${Number(rec.hargaBarang).toLocaleString('id-ID')}
+            </div>`;
+      }
+
+      return `
+      <tr class="group border-b border-slate-100 hover:bg-slate-50 transition-all duration-200">
+        <td class="py-4 px-3">
+          <div class="font-black text-slate-800 text-xs uppercase tracking-tight">${rec.name}</div>
+          <div class="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5 font-medium">
+            <i class="fa-solid fa-phone-flip text-[8px]"></i> ${rec.phone || '-'}
+          </div>
+        </td>
+        <td class="py-4 px-2">
+          <div class="text-[9px] font-black text-indigo-500 uppercase tracking-widest mb-0.5">${rec.region}</div>
+          <div class="text-[11px] font-bold text-slate-600 leading-tight">${rec.divisi}</div>
+        </td>
+        <td class="py-4 px-2">
+          <div class="text-xs font-bold text-slate-700 underline decoration-slate-200 underline-offset-4 decoration-2">${rec.jenisPaket}</div>
+          <div class="text-[10px] text-slate-500 italic mt-1 line-clamp-1 overflow-hidden" title="${rec.detailPaket || '-'}">
+            ${rec.detailPaket || '-'}
+          </div>
+        </td>
+        <td class="py-4 px-2">
+          <div class="flex flex-wrap gap-1">
+            ${protectionTags.length > 0 ? protectionTags.join('') : '<span class="text-slate-300 text-[9px] uppercase font-bold tracking-tighter">Tanpa Proteksi</span>'}
+          </div>
+          ${insuranceInfo}
+        </td>
+        <td class="py-4 px-2">
+          <div class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black border uppercase tracking-tighter ${
+            rec.layanan === 'Urgent Express' 
+            ? 'bg-rose-50 text-rose-600 border-rose-100' 
+            : 'bg-emerald-50 text-emerald-600 border-emerald-100'
+          }">
+            <i class="${rec.layanan === 'Urgent Express' ? 'fa-solid fa-bolt mr-1' : 'fa-solid fa-check-circle mr-1'} text-[8px]"></i>
+            ${rec.layanan}
+          </div>
+        </td>
+        <td class="py-4 px-3 text-center">
+          <div class="text-base font-black text-slate-800 leading-none">${rec.qty}</div>
+          <div class="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Koli</div>
+        </td>
+      </tr>
+      `;
+    }).join('');
+
+    document.getElementById('btnPrintFromModal').onclick = function() {
+      generateNativePrint(payload);
+      closeDetailModal();
+    };
+  }
+
+  // Fungsi Buka-Tutup Modal
+  function openDetailModal() {
+    const modal = document.getElementById('detailModal');
+    const content = document.getElementById('detailModalContent');
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+      modal.classList.remove('opacity-0');
+      content.classList.remove('scale-95');
+    }, 10);
+  }
+
+  function closeDetailModal() {
+    const modal = document.getElementById('detailModal');
+    const content = document.getElementById('detailModalContent');
+    modal.classList.add('opacity-0');
+    content.classList.add('scale-95');
+    setTimeout(() => modal.classList.add('hidden'), 300);
+  }
+
+// --- LOGIKA EDIT TRANSAKSI ---
+// Fungsi untuk me-ngaktifkan/menonaktifkan input Nilai Barang jika Asuransi dipilih
+function toggleEditAsuransi() {
+  const asuransiVal = document.getElementById('editAsuransi').value;
+  const nilaiInput = document.getElementById('editNilaiBarang');
+  
+  if (asuransiVal === 'Ya') {
+    nilaiInput.disabled = false;
+    nilaiInput.classList.remove('bg-slate-100');
+  } else {
+    nilaiInput.disabled = true;
+    nilaiInput.value = '';
+    nilaiInput.classList.add('bg-slate-100');
+  }
+}
+
+// --- LOGIKA TAMBAHAN UNTUK MODAL EDIT ---
+
+function openEditModal(transactionDetailId) {
+  showLoading(true, "Mempersiapkan data edit...");
+  google.script.run
+    .withFailureHandler(err => {
+      showLoading(false);
+      showErrorAlert("Gagal mengambil data: " + err.message);
+    })
+    .withSuccessHandler(data => {
+      showLoading(false);
+      if (data) {
+        document.getElementById('editTransactionDetailId').value = data.transaction_detail_id;
+        
+        // Elemen Input
+        const inputTujuanRegion = document.getElementById('editTujuanRegion');
+        const wrapperTujuanDivisi = document.getElementById('wrapperEditTujuanDivisi');
+        const inputTujuanDivisi = document.getElementById('editTujuanDivisi');
+        const lblAlamatTujuan = document.getElementById('lblEditAlamatTujuan');
+        const inputAlamatTujuan = document.getElementById('editAlamatTujuan');
+        const lblNamaPenerima = document.getElementById('lblEditNamaPenerima');
+
+        // Isi Data Default
+        document.getElementById('editPembebanan').value = data.pembebanan || '-';
+        inputTujuanRegion.value = data.tujuan_region || '-';
+        document.getElementById('editSenderCC').value = data.sender_cost_center || '-';
+        document.getElementById('editCCTujuan').value = data.cost_center_tujuan_divisi || '-';
+        
+        inputTujuanDivisi.value = data.tujuan_divisi || '';
+        document.getElementById('editNamaPenerima').value = data.nama_penerima || '';
+        document.getElementById('editNoHpPenerima').value = data.nomor_telepon_penerima || '';
+        document.getElementById('editJenisBarang').value = data.jenis_barang || 'Dokumen';
+        document.getElementById('editJumlahBarang').value = data.jumlah_barang || 1;
+        document.getElementById('editDetailBarang').value = data.detail_barang || '';
+        document.getElementById('editLayanan').value = data.layanan || 'Reguler';
+        document.getElementById('editPackingKayu').value = data.packing_kayu || 'Tidak';
+        document.getElementById('editPackingBubble').value = data.packing_bubble || 'Tidak';
+        document.getElementById('editAsuransi').value = data.asuransi || 'Tidak';
+        document.getElementById('editNilaiBarang').value = data.nilai_barang || '';
+
+        // --- LOGIKA "OTHER" ---
+        const isOther = (data.tujuan_region === 'OTHER');
+
+        if (isOther) {
+          // 1. Sembunyikan field Divisi
+          wrapperTujuanDivisi.classList.add('hidden');
+          
+          // 2. Ubah UI Label layaknya form input
+          lblAlamatTujuan.innerText = 'ALAMAT LENGKAP TUJUAN *';
+          lblAlamatTujuan.className = 'block text-[11px] font-bold text-indigo-600 mb-1';
+          lblNamaPenerima.innerText = 'NAMA PENERIMA *';
+          lblNamaPenerima.className = 'block text-[11px] font-bold text-indigo-600 mb-1';
+
+          // 3. Aktifkan Field Alamat & isi valuenya dari data divisi (sesuai input awal)
+          inputAlamatTujuan.disabled = false;
+          inputAlamatTujuan.classList.remove('bg-slate-100', 'text-slate-500', 'cursor-not-allowed', 'border-slate-200');
+          inputAlamatTujuan.value = data.tujuan_divisi || data.alamat_tujuan_divisi || '';
+
+        } else {
+          // 1. Tampilkan field Divisi
+          wrapperTujuanDivisi.classList.remove('hidden');
+          
+          // 2. Kembalikan UI Label
+          lblAlamatTujuan.innerText = 'Alamat Lengkap';
+          lblAlamatTujuan.className = 'block text-[11px] font-bold text-slate-700 mb-1';
+          lblNamaPenerima.innerText = 'Nama Penerima';
+          lblNamaPenerima.className = 'block text-[11px] font-bold text-slate-700 mb-1';
+
+          // 3. Matikan Field Divisi & Alamat (Read-Only)
+          inputTujuanDivisi.disabled = true;
+          inputTujuanDivisi.classList.add('bg-slate-100', 'text-slate-500', 'cursor-not-allowed', 'border-slate-200');
+          
+          inputAlamatTujuan.value = data.alamat_tujuan_divisi || '';
+          inputAlamatTujuan.disabled = true;
+          inputAlamatTujuan.classList.add('bg-slate-100', 'text-slate-500', 'cursor-not-allowed', 'border-slate-200');
+        }
+        
+        toggleEditAsuransi();
+
+        // Munculkan Modal
+        const modal = document.getElementById('editModal');
+        const content = document.getElementById('editModalContent');
+        modal.classList.remove('hidden');
+        setTimeout(() => {
+          modal.classList.remove('opacity-0');
+          content.classList.remove('scale-95');
+        }, 10);
+      }
+    })
+    .getSingleTransactionDetail(transactionDetailId);
+}
+
+// Fungsi Hapus yang dipicu dari dalam Modal Edit
+function handleDeleteFromEdit() {
+  const detailId = document.getElementById('editTransactionDetailId').value;
+  if (!detailId) return;
+
+  // Tutup modal edit dulu agar tidak tumpang tindih dengan SweetAlert
+  closeEditModal();
+  
+  // Panggil fungsi prompt hapus yang sudah ada
+  setTimeout(() => {
+    deleteTransactionPrompt(detailId);
+  }, 400);
+}
+
+function submitEditTransaction() {
+  const detailId = document.getElementById('editTransactionDetailId').value;
+  
+  // Ambil data dari form (Hanya field yang tidak disabled)
+  const payload = {
+    tujuan_region: document.getElementById('editTujuanRegion').value,
+    tujuan_divisi: document.getElementById('editTujuanDivisi').value,
+    alamat_tujuan_divisi: document.getElementById('editAlamatTujuan').value,
+    nama_penerima: document.getElementById('editNamaPenerima').value,
+    nomor_telepon_penerima: document.getElementById('editNoHpPenerima').value,
+    jenis_barang: document.getElementById('editJenisBarang').value,
+    jumlah_barang: parseInt(document.getElementById('editJumlahBarang').value) || 1,
+    detail_barang: document.getElementById('editDetailBarang').value,
+    layanan: document.getElementById('editLayanan').value,
+    packing_kayu: document.getElementById('editPackingKayu').value,
+    packing_bubble: document.getElementById('editPackingBubble').value,
+    asuransi: document.getElementById('editAsuransi').value,
+    nilai_barang: document.getElementById('editAsuransi').value === 'Ya' ? (parseFloat(document.getElementById('editNilaiBarang').value) || 0) : null
+  };
+
+  console.log("payload edit", payload);
+
+  // --- PENJAGAAN & VALIDASI ---
+
+  // 1. Validasi Batasan Karakter Umum (Max Char)
+  console.log("payload.nama_penerima.lengt",payload.nama_penerima.length);
+  if (payload.nama_penerima && payload.nama_penerima.length > 50) {
+      Swal.fire('Perhatian', 'Nama Penerima terlalu panjang (maksimal 100 karakter).', 'warning');
+      return;
+  }
+  if (payload.nomor_telepon_penerima && payload.nomor_telepon_penerima.length > 20) {
+      Swal.fire('Perhatian', 'Nomor Telepon terlalu panjang (maksimal 20 digit).', 'warning');
+      return;
+  }
+  if (payload.detail_barang && payload.detail_barang.length > 200) {
+      Swal.fire('Perhatian', 'Detail Paket/Isi terlalu panjang (maksimal 200 karakter).', 'warning');
+      return;
+  }
+  if (payload.tujuan_divisi && payload.tujuan_divisi.length > 100) {
+      Swal.fire('Perhatian', 'Nama Divisi Tujuan terlalu panjang (maksimal 100 karakter).', 'warning');
+      return;
+  }
+
+  // 2. Validasi Khusus Region OTHER
+  if (payload.tujuan_region === "OTHER") {
+      // Wajib isi nomor telepon
+      if (!payload.nomor_telepon_penerima || payload.nomor_telepon_penerima.trim().length === 0) {
+          Swal.fire('Perhatian', 'Wajib mengisi "Nomor Telepon Penerima" untuk Tujuan Region OTHER.', 'warning');
+          return;
+      }
+      
+      // Nomor telepon harus berupa angka
+      const phoneRegex = /^[0-9]+$/;
+      if (!phoneRegex.test(payload.nomor_telepon_penerima.trim())) {
+          Swal.fire('Perhatian', 'Nomor Telepon Penerima hanya boleh berisi angka.', 'warning');
+          return;
+      }
+
+      console.log("payload.tujuan_divisi.length",payload.tujuan_divisi.length)
+
+      // Panjang karakter alamat tidak boleh lebih dari 200
+      if (payload.tujuan_divisi && payload.tujuan_divisi.length > 200) {
+          Swal.fire('Perhatian', 'Alamat Lengkap terlalu panjang (maksimal 200 karakter).', 'warning');
+          return;
+      }
+  }
+
+  // 3. Validasi Asuransi
+  if (payload.asuransi === "Ya" && (!payload.nilai_barang || payload.nilai_barang <= 0)) {
+    Swal.fire('Perhatian', 'Wajib mengisi "Nilai Barang" untuk Barang dengan Asuransi.', 'warning');
+    return;
+  }
+
+  // 4. Validasi Divisi & Alamat
+  if (!payload.tujuan_divisi && payload.tujuan_region === "OTHER") {
+    Swal.fire('Perhatian', 'Mohon lengkapi Tujuan Divisi', 'warning');
+    return;
+  }
+
+  // 5. Validasi Kelengkapan Data Umum
+  if (!payload.nama_penerima || payload.nama_penerima.trim() === '') {
+    Swal.fire('Perhatian', 'Mohon lengkapi Nama Penerima', 'warning');
+    return;
+  }
+
+  if (!payload.jumlah_barang || payload.jumlah_barang < 1) {
+    Swal.fire('Perhatian', 'Mohon lengkapi Jumlah Paket dengan benar (minimal 1).', 'warning');
+    return;
+  }
+
+  // --- JIKA LOLOS VALIDASI, PROSES SIMPAN ---
+  showLoading(true, "Menyimpan perubahan...");
+  
+  google.script.run
+    .withFailureHandler(err => {
+      showLoading(false);
+      showErrorAlert("Gagal update: " + err.message);
+    })
+    .withSuccessHandler(() => {
+      showLoading(false);
+      closeEditModal();
+      Swal.fire({ 
+        icon: 'success', 
+        title: 'Berhasil', 
+        text: 'Data diperbarui.', 
+        timer: 1500, 
+        showConfirmButton: false 
+      });
+      loadViewDashboardData();
+    })
+    .updateTransactionDetail(currentUser.role, detailId, payload);
+}
+
+function closeEditModal() {
+  const modal = document.getElementById('editModal');
+  const content = document.getElementById('editModalContent');
+  modal.classList.add('opacity-0');
+  content.classList.add('scale-95');
+  setTimeout(() => {
+    modal.classList.add('hidden');
+    document.getElementById('editTransactionForm').reset();
+  }, 300);
+}
+</script>
