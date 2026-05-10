@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.default.min.css">
+
+    <!-- include STYLE / CSS - get from 'Styles.html' file -->
+    <?!= include('2_Styles'); ?>
+  </head>
+
+  <body class="font-sans relative">
+    <?!= include('Login_UI'); ?> <!-- include LOGIN SCREEN - get from 'Login_UI.html' file  -->
+    
+    <!-- MAIN PORTAL - after login -->
+    <div id="mainPortalWrapper" class="hidden opacity-0 transition-opacity duration-700 p-4 md:p-8">
+      <?!= include('Header_UI'); ?>  <!-- include HEADER after login - get from 'Header_UI.html' file  -->
+      
+      <?!= include('Input_Transaksi_UI'); ?> <!-- ISI MAIN APP - FORM INPUT TRANSAKSI -->
+      <?!= include('View_Dashboard_UI'); ?>  <!-- VIEW DASHBOARD SECTION -->
+      <?!= include('Manage_Users_UI'); ?>    <!-- ATUR PENGGUNA / MANAGE USERS SECTION -->
+      <?!= include('Master_Divisi_UI'); ?>   <!-- MASTER DIVISI SECTION -->
+    </div>
+
+    <!-- include FAQ and LOADER COMPONENTS - get from 'Components_UI.html' file  -->
+    <?!= include('Components_UI'); ?>
+  </body>
+
+  <script>
+    // INIT VARIABEL
+    let masterDivisi = [], currentUser = {}, tsInstances = {}, cardCounterId = 0, currentActivePayload = null;; 
+    // cardCounterId -> ID UNIK BUAT SETIAP BLOK RESI AMAN KALO DI APUS SALAH SATU
+    // currentActivePayload -> Variable global untuk menampung data yang sedang dibuka - view detail modal (dashboard)
+
+    window.onload = function() {
+      for(let i=1; i<=100; i++) { //MAKSIMAL BALIK KA 20 HUNGKUL
+        document.getElementById('jumlahTujuan').innerHTML += `<option value="${i}">${i} Tujuan</option>`;
+      }
+      document.getElementById('inputSuperindoEmail').focus();
+    };
+
+    //JALANKEUN NALIKA HALAMAN MIMITI DIBUKA PIKEUN SET STANDAR AYEUNA-AYEUNA
+    document.addEventListener("DOMContentLoaded", function() {
+      const now = new Date(); //NYANDAK WAKTOS AYEUNA(WIB)
+      
+      const startDateObj = new Date(); //BIKIN OBJEK TANGGAL BARU KHUSUS BUAT START DATE (TODAY)
+      startDateObj.setDate(now.getDate());
+
+      //FUNGSI BUAT KONVERSI KE LOKAL ISO STRING (YYYY-MM-DD)
+      //FUNGSI BIAR NGGAK NULIS RUMUS OFFSET BERKALI-KALI
+      const toLocalISO = (dateObj) => {
+          const offset = dateObj.getTimezoneOffset() * 60000;
+          return new Date(dateObj - offset).toISOString().split('T')[0];
+      };
+
+      const startInput = document.getElementById('filterStartDate');
+      const endInput = document.getElementById('filterEndDate');
+      
+      if (startInput && endInput) {
+        const startDateValue = toLocalISO(startDateObj);
+        const endDateValue = toLocalISO(now);
+
+        startInput.value = startDateValue;
+        endInput.value = endDateValue;
+        endInput.min = startDateValue; //SET MINIMAL END DATE IKUTIN START DATE (TODAY)
+      }
+    });
+
+    // Fungsi untuk memunculkan/menyembunyikan alert error di UI
+    function tampilkanError(pesan) {
+      const errorDiv = document.getElementById('loginError');
+      errorDiv.innerText = pesan;
+      errorDiv.classList.remove('hidden');
+    }
+
+    function sembunyikanError() {
+      const errorDiv = document.getElementById('loginError');
+      errorDiv.classList.add('hidden');
+    }
+
+    function showLoading(show, text = "Memproses...") {
+      document.getElementById('loadingText').innerText = text;
+      const loader = document.getElementById('loading');
+      if (show) { 
+        loader.style.display = 'flex'; 
+        loader.style.position = 'fixed'; 
+        loader.style.top = '0'; 
+        loader.style.left = '0'; 
+        loader.style.width = '100vw'; 
+        loader.style.height = '100vh'; 
+        loader.style.zIndex = '9999'; 
+      } else { 
+        loader.style.display = 'none'; 
+      }
+    }
+
+    function showErrorAlert(message) {
+      Swal.fire({ 
+        icon: 'error', 
+        title: 'Oops...', 
+        text: message, 
+        confirmButtonColor: '#4f46e5'
+      });
+    }
+  </script>
+
+  <!-- SCRIPT FROM FILE -->
+  <?!= include('Login_JS'); ?>
+  <?!= include('Header_JS'); ?>
+  <?!= include('Input_Transaksi_JS'); ?>
+  <?!= include('View_Dashboard_JS'); ?>
+  <?!= include('Manage_Users_JS'); ?>
+  <?!= include('Master_Divisi_JS'); ?>
+  <?!= include('Components_JS'); ?>
+
+</html>
