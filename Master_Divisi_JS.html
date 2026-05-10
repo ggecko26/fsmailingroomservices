@@ -1,0 +1,270 @@
+<script>
+  // 1. Load Data Master ke Tabel
+  function loadMasterDivisiData() {
+    const tableId = '#masterDivisiTable';
+    showSection('masterDivisiSection');
+
+    if ($.fn.DataTable.isDataTable(tableId)) {
+      $(tableId).DataTable().clear().destroy();
+    }
+
+    showLoading(true, "Sinkronisasi Struktur Organisasi...");
+    
+    google.script.run
+      .withSuccessHandler(data => {
+          showLoading(false);
+          masterDivisi = data; // Update cache lokal
+          renderMasterTable(data);
+          $(tableId).DataTable({
+              "order": [[4, "desc"]], // Urutkan berdasarkan "Terakhir Diubah"
+              "columnDefs": [
+                  { "searchable": false, "orderable": false, "targets": [5] } // Index 5 adalah kolom Aksi
+              ],
+              "pageLength": 10,
+              "language": {
+                  "search": "Cari Divisi/Region:",
+                  "lengthMenu": "_MENU_",
+                  "info": "Menampilkan _START_ sampai _END_ dari _TOTAL_ user",
+                  "paginate": { "previous": "<", "next": ">" }
+              },
+              "retrieve": true,
+              "responsive": true
+          });
+      })
+      .getMasterDivisi(); // Memanggil fungsi server-side yang sudah ada
+  }
+
+  function renderMasterTable(data) {
+    const tbody = document.getElementById('masterDivisiTableBody');
+    tbody.innerHTML = data.map(d => {
+      let rawTimestamp = d.updatedAt ? new Date(d.updatedAt).getTime() : 0;
+      let formattedDate = d.updatedAt ? new Date(d.updatedAt).toLocaleString('id-ID', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      }) : "-";
+
+      // Tooltip Email Content
+      const hasEmail = d.email || d.email2;
+      const emailContent = `
+        <div class="flex flex-col gap-1">
+          ${d.email ? `<div class="flex items-center gap-1.5"><i class="fa-solid fa-envelope text-indigo-400"></i> ${d.email}</div>` : ''}
+          ${d.email2 ? `<div class="flex items-center gap-1.5"><i class="fa-solid fa-envelope-open text-indigo-400"></i> ${d.email2}</div>` : ''}
+          ${!hasEmail ? '<div class="italic text-slate-400">Email tidak terdaftar</div>' : ''}
+        </div>
+      `;
+
+      return `
+        <tr class="hover:bg-slate-50 transition border-b border-slate-50">
+          <td class="p-4 font-bold text-indigo-600 text-xs">${d.region}</td>
+          
+          <td class="p-4">
+            <div class="group relative cursor-help w-fit">
+              <div class="font-bold text-slate-800 text-sm border-b border-dotted border-slate-300 group-hover:text-indigo-600 transition-colors">${d.divisi}</div>
+              <div class="text-[9px] text-slate-400">Code Area: ${d.kodeArea}</div>
+              
+              <div class="absolute left-0 -top-14 hidden group-hover:block bg-slate-800 text-white text-[10px] py-2 px-3 rounded-lg shadow-xl z-50 whitespace-nowrap">
+                ${emailContent}
+                <div class="absolute top-full left-4 border-8 border-transparent border-t-slate-800"></div>
+              </div>
+            </div>
+          </td>
+
+          <td class="p-4 font-mono text-xs text-amber-600 font-bold">${d.costCenter || '-'}</td>
+          
+          <td class="p-4">
+            <div class="group relative cursor-help">
+              <div class="text-[11px] text-slate-600 max-w-[300px] line-clamp-2 leading-relaxed">
+                ${d.alamat || '-'}
+              </div>
+              
+              ${d.alamat ? `
+              <div class="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-slate-800 text-white text-[10px] py-2 px-3 rounded-lg shadow-xl z-50 w-64 whitespace-normal leading-normal border border-slate-700">
+                <div class="flex gap-2">
+                  <i class="fa-solid fa-location-dot text-rose-400 mt-0.5"></i>
+                  <span>${d.alamat}</span>
+                </div>
+                <div class="absolute top-full left-4 border-8 border-transparent border-t-slate-800"></div>
+              </div>
+              ` : ''}
+            </div>
+          </td>
+
+          <td class="p-4 text-slate-400 text-[11px]" data-order="${rawTimestamp}">
+            <i class="fa-regular fa-clock mr-1 text-indigo-500"></i> ${formattedDate}
+          </td>
+          
+          <td class="p-4 text-center">
+            <div class="flex justify-center gap-2">
+              <button onclick='editMasterPrompt(${JSON.stringify(d).replace(/'/g, "&apos;")})' class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition flex items-center justify-center">
+                <i class="fa-solid fa-pen-to-square text-xs"></i>
+              </button>
+              <button onclick="deleteMasterPrompt(${d.id})" class="w-8 h-8 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white transition flex items-center justify-center">
+                <i class="fa-solid fa-trash-can text-xs"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+}
+
+async function addNewMasterPrompt(existingData = null) {
+    const isEdit = existingData !== null;
+    const { value: formValues } = await Swal.fire({
+        title: isEdit ? 'Edit Data Divisi' : 'Tambah Divisi Baru',
+        width: '650px',
+        html: `
+          <div class="text-left">
+            <div class="bg-indigo-50 border-l-4 border-indigo-500 p-3 mb-5 rounded-r-lg">
+              <div class="flex items-center gap-2 mb-1">
+                  <i class="fa-solid fa-triangle-exclamation text-indigo-600 text-xs"></i>
+                  <p class="text-[11px] font-black text-indigo-800 uppercase tracking-tight">Penting: Konsistensi Data</p>
+              </div>
+              <p class="text-[10px] text-indigo-700 leading-relaxed">
+                  Mohon pastikan <b>Region, Alamat,</b> dan <b>Kode Area</b> sesuai dan konsisten. Ketidaksesuaian/ketidakonsistenan data akan mempengaruhi akurasi fitur <i>Auto-Check</i> lokasi yang digunakan sistem untuk validasi pengiriman ke lokasi yang sama.
+              </p>
+            </div>
+
+            <div class="space-y-4 p-2 overflow-y-auto max-h-[65vh]">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="premium-label">Region *</label>
+                        <select id="swal-region" class="premium-input">
+                            <option value="CSO" ${isEdit && existingData.region === 'CSO' ? 'selected' : ''}>CSO</option>
+                            <option value="BO" ${isEdit && existingData.region === 'BO' ? 'selected' : ''}>BO</option>
+                            <option value="DC" ${isEdit && existingData.region === 'DC' ? 'selected' : ''}>DC</option>
+                            <option value="STORE" ${isEdit && existingData.region === 'STORE' ? 'selected' : ''}>STORE</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="premium-label">Nama Divisi / Toko *</label>
+                        <input id="swal-divisi" class="premium-input font-bold" value="${isEdit ? existingData.divisi : ''}" placeholder="LSI PAMULANG">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="premium-label">Cost Center</label>
+                        <input id="swal-cc" class="premium-input" value="${isEdit ? (existingData.costCenter || '') : ''}" placeholder="DE520, BX200, DX300, SA026, dsb">
+                    </div>
+                    <div>
+                        <label class="premium-label">Kode Area (Lokasi)</label>
+                        <input id="swal-kode" class="premium-input" value="${isEdit ? (existingData.kodeArea || '') : ''}" placeholder="CSO, BOB, DCA, PCA, dsb">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="premium-label">Alamat Lengkap Pengiriman *</label>
+                    <textarea id="swal-alamat" class="premium-input h-16 text-xs" placeholder="Ketik alamat lengkap...">${isEdit ? (existingData.alamat || '') : ''}</textarea>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                      <label class="premium-label">Email Utama (optional)</label>
+                      <input id="swal-email" type="email" class="premium-input" value="${isEdit ? (existingData.email || '') : ''}" placeholder="nama@superindo.co.id">
+                  </div>
+                  <div>
+                      <label class="premium-label">Email Sekunder (optional)</label>
+                      <input id="swal-email2" type="email" placeholder="nama@superindo.co.id" class="premium-input" value="${isEdit ? (existingData.email2 || '') : ''}">
+                  </div>
+                </div>
+
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <div class="flex items-center gap-2 mb-3 group relative cursor-help">
+                    <p class="text-[10px] font-black text-slate-600 uppercase tracking-widest flex items-center gap-1">
+                      <i class="fa-solid fa-circle-nodes text-indigo-500"></i> Mapping Integrasi Sistem
+                    </p>
+                    <i class="fa-solid fa-circle-info text-[10px] text-slate-400"></i>
+                    
+                    <div class="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-slate-800 text-white text-[10px] p-2 rounded shadow-xl z-50 w-64 font-normal leading-relaxed normal-case">
+                      Data ini tidak terintegrasi otomatis. Field di bawah adalah penghubung kunci (Key Connector) untuk sinkronisasi data dengan sistem SAP ataupun SunFish.
+                    </div>
+                  </div>
+                  <div class="space-y-3">
+                      <div>
+                          <label class="block text-[9px] font-black text-slate-500 mb-1 ml-1 uppercase">Work Location Name (SAP)</label>
+                          <input id="swal-loc-sap" class="premium-input !bg-white text-xs" value="${isEdit ? (existingData.workLocationSap || '') : ''}">
+                      </div>
+                      <div class="grid grid-cols-2 gap-3">
+                          <div>
+                              <label class="block text-[9px] font-black text-slate-500 mb-1 ml-1 uppercase">Work Location Code (Sunfish)</label>
+                              <input id="swal-loc-code-sunfish" class="premium-input !bg-white text-xs font-mono" value="${isEdit ? (existingData.workLocationCodeSunfish || '') : ''}" placeholder="Contoh: 0999, 0970, 0286, dsb">
+                          </div>
+                          <div>
+                              <label class="block text-[9px] font-black text-slate-500 mb-1 ml-1 uppercase">Work Location Name (Sunfish)</label>
+                              <input id="swal-loc-sunfish" class="premium-input !bg-white text-xs" value="${isEdit ? (existingData.workLocationSunfish || '') : ''}">
+                          </div>
+                      </div>
+                      <div>
+                          <label class="block text-[9px] font-black text-slate-500 mb-1 ml-1 uppercase">Organization Unit (Sunfish)</label>
+                          <input id="swal-org-sunfish" class="premium-input !bg-white text-xs" value="${isEdit ? (existingData.organizationUnitSunfish || '') : ''}">
+                      </div>
+                  </div>
+                </div>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Simpan Data',
+        preConfirm: () => {
+            return {
+                id: isEdit ? existingData.id : null,
+                region: document.getElementById('swal-region').value,
+                divisi: document.getElementById('swal-divisi').value.toUpperCase(),
+                costCenter: document.getElementById('swal-cc').value,
+                kodeArea: document.getElementById('swal-kode').value,
+                alamat: document.getElementById('swal-alamat').value,
+                workLocationSap: document.getElementById('swal-loc-sap').value,
+                workLocationCodeSunfish: document.getElementById('swal-loc-code-sunfish').value, // Field Baru
+                workLocationSunfish: document.getElementById('swal-loc-sunfish').value,
+                organizationUnitSunfish: document.getElementById('swal-org-sunfish').value,
+                email: isEdit ? existingData.email : '', // Jaga data lama
+                email2: isEdit ? existingData.email2 : ''
+            }
+        }
+    });
+
+    if (formValues) {
+        showLoading(true, "Sinkronisasi Master...");
+        google.script.run
+            .withSuccessHandler(() => {
+                showLoading(false);
+                Swal.fire({ icon: 'success', title: 'Berhasil!', timer: 1500, showConfirmButton: false });
+                loadMasterDivisiData();
+            })
+            .withFailureHandler(err => {
+                showLoading(false);
+                showErrorAlert(err.message);
+            })
+            .saveMasterDivisi(formValues);
+    }
+}
+
+  // Shortcut untuk edit
+  function editMasterPrompt(data) {
+      addNewMasterPrompt(data);
+  }
+
+  // 3. Fungsi Hapus
+  function deleteMasterPrompt(id) {
+      Swal.fire({
+          title: 'Hapus Divisi ini?',
+          text: "User tidak akan bisa memilih divisi ini lagi di form pengiriman.",
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#ef4444',
+          confirmButtonText: 'Ya, Hapus'
+      }).then((result) => {
+          if (result.isConfirmed) {
+              showLoading(true, "Menghapus data...");
+              google.script.run
+                  .withSuccessHandler(() => {
+                      showLoading(false);
+                      loadMasterDivisiData();
+                  })
+                  .deleteMasterDivisi(id); // Buat fungsi ini di Code.gs
+          }
+      });
+  }
+
+</script>
